@@ -4,6 +4,7 @@ import {
   matchAssetForMandate,
   mandateIsUsable,
   smartValidateAsset,
+  assetLooksComplete,
   type AssetDraft,
   type Mandate,
   type MatchableAsset,
@@ -167,5 +168,22 @@ describe("smartValidateAsset", () => {
 
   it("does not demand a regulator for unregulated sectors", () => {
     expect(smartValidateAsset({ ...base, sector: "crypto", regulator: null })).toEqual([]);
+  });
+});
+
+describe("assetLooksComplete", () => {
+  const base: AssetDraft = {
+    description: "x".repeat(200),
+    askingPrice: 1_000_000,
+    highlights: ["Licensed"],
+    sector: "fintech",
+    regulator: "FCA",
+    yearIssued: 2020,
+    licenseType: "API",
+  };
+
+  it("is true only when smart validation is clean", () => {
+    expect(assetLooksComplete(base)).toBe(true);
+    expect(assetLooksComplete({ ...base, askingPrice: null })).toBe(false);
   });
 });

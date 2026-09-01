@@ -2,6 +2,7 @@ import { getCurrentUser, requireApiUser } from "@/lib/auth/session";
 import { handle, jsonOk, notFound, readJson } from "@/lib/http";
 import { smartValidateAsset } from "@/lib/match";
 import {
+  assetIsPubliclyVisible,
   assetOwnedBy,
   deleteAsset,
   getAssetRecordById,
@@ -18,7 +19,7 @@ export async function GET(_request: Request, { params }: Ctx) {
     const asset = await getAssetRecordById(id);
     if (!asset) throw notFound("Asset not found");
 
-    if (asset.status !== "published") {
+    if (!assetIsPubliclyVisible(asset)) {
       const user = await getCurrentUser();
       if (!user || !assetOwnedBy(asset, user)) throw notFound("Asset not found");
     }

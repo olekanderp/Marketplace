@@ -19,6 +19,21 @@ export function formatMoneyFull(value: number | null, currency: Currency): strin
   }).format(value);
 }
 
+export function parseDigits(raw: string): number | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits === "") return null;
+  const n = Number(digits);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+export function safeNextPath(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\") || raw.includes("://")) {
+    return null;
+  }
+  return raw;
+}
+
 export function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diff / 60_000);

@@ -1,4 +1,12 @@
-import { Op, literal, type Includeable, type Order, type WhereOptions } from "sequelize";
+import {
+  Op,
+  QueryTypes,
+  UniqueConstraintError,
+  literal,
+  type Includeable,
+  type Order,
+  type WhereOptions,
+} from "sequelize";
 import { db, type Asset } from "@/lib/db";
 import {
   isSellerAssetStatus,
@@ -18,6 +26,7 @@ import {
   serializeAsset,
   serializeBuyerProfile,
   serializeConversation,
+  serializeConversationPreview,
   serializeMessage,
   serializeSellerProfile,
   serializeUserAdmin,
@@ -76,6 +85,7 @@ export interface AssetListResult {
 interface ListAssetsOpts {
   scope?: "published" | "all";
   mandate?: Mandate | null;
+  statuses?: AssetStatus[];
 }
 
 export async function listAssets(
@@ -88,6 +98,7 @@ export async function listAssets(
   const where: WhereOptions & Record<symbol, unknown> = {};
 
   if (publicScope) where.status = "published";
+  else if (opts.statuses?.length) where.status = { [Op.in]: opts.statuses };
   if (query.sector?.length) where.sector = { [Op.in]: query.sector };
   if (query.country?.length) where.country = { [Op.in]: query.country };
   if (query.businessStatus?.length) where.businessStatus = { [Op.in]: query.businessStatus };
@@ -337,7 +348,7 @@ const ACTIVE_USER_INCLUDE: Includeable = {
 };
 
 export async function listBuyers(query: BuyerQuery) {
-  const { BuyerProfile } = db();
+  const { BuyerProfile, sequelize } = db();
   const where: WhereOptions & Record<symbol, unknown> = {};
   const and: WhereOptions[] = [];
 
@@ -353,36 +364,35 @@ export async function listBuyers(query: BuyerQuery) {
     const like = { [Op.iLike]: `%${query.q}%` };
     and.push({ [Op.or]: [{ headline: like }, { bio: like }, { mandate: like }] });
   }
+  if (query.sector?.length) {
+    const list = query.sector.map((s) => sequelize.escape(s)).join(", ");
+    and.push(literal(`jsonb_exists_any(target_sectors, ARRAY[${list}]::text[])`));
+  }
+  if (query.jurisdiction) {
+    const like = sequelize.escape(`%${query.jurisdiction}%`);
+    and.push(
+      literal(
+        `EXISTS (SELECT 1 FROM jsonb_array_elements_text(target_jurisdictions) AS j(val) WHERE j.val ILIKE ${like})`,
+      ),
+    );
+  }
   if (and.length) where[Op.and] = and;
 
-  const rows = await BuyerProfile.findAll({
+  const { rows, count } = await BuyerProfile.findAndCountAll({
     where,
     include: [ACTIVE_USER_INCLUDE],
     order: [["updatedAt", "DESC"]],
+    limit: query.perPage,
+    offset: (query.page - 1) * query.perPage,
+    distinct: true,
   });
 
-  const filtered = rows.filter((p) => {
-    if (query.sector?.length) {
-      const set = new Set(p.targetSectors ?? []);
-      if (!query.sector.some((s) => set.has(s))) return false;
-    }
-    if (query.jurisdiction) {
-      const needle = query.jurisdiction.toLowerCase();
-      if (!(p.targetJurisdictions ?? []).some((j) => j.toLowerCase().includes(needle))) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  const total = filtered.length;
-  const start = (query.page - 1) * query.perPage;
   return {
-    items: filtered.slice(start, start + query.perPage).map(serializeBuyerProfile),
-    total,
+    items: rows.map(serializeBuyerProfile),
+    total: count,
     page: query.page,
     perPage: query.perPage,
-    pageCount: Math.max(1, Math.ceil(total / query.perPage)),
+    pageCount: Math.max(1, Math.ceil(count / query.perPage)),
   };
 }
 
@@ -395,10 +405,14 @@ export async function getBuyer(userId: string) {
   return p ? serializeBuyerProfile(p) : null;
 }
 
-const CONVO_INCLUDE: Includeable[] = [
+const CONVO_PEOPLE_INCLUDE: Includeable[] = [
   { association: "buyer", attributes: ["id", "name", "email", "role", "status"] },
   { association: "seller", attributes: ["id", "name", "email", "role", "status"] },
   { association: "asset", attributes: ["id", "title", "slug", "status"] },
+];
+
+const CONVO_INCLUDE: Includeable[] = [
+  ...CONVO_PEOPLE_INCLUDE,
   {
     association: "messages",
     include: [{ association: "sender", attributes: ["id", "name", "role"] }],
@@ -406,14 +420,49 @@ const CONVO_INCLUDE: Includeable[] = [
 ];
 
 export async function listConversationsFor(userId: string) {
-  const { Conversation } = db();
+  const { Conversation, sequelize } = db();
   const rows = await Conversation.findAll({
     where: { [Op.or]: [{ buyerId: userId }, { sellerId: userId }] },
-    include: CONVO_INCLUDE,
+    include: CONVO_PEOPLE_INCLUDE,
+    order: [["updatedAt", "DESC"]],
   });
-  return rows
-    .map((c) => serializeConversation(c, userId))
-    .sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt));
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((c) => c.id);
+  const unreadRows = await sequelize.query<{ conversation_id: string; n: number }>(
+    `SELECT conversation_id, COUNT(*)::int AS n
+     FROM messages
+     WHERE conversation_id IN (:ids)
+       AND sender_id <> :userId
+       AND read_at IS NULL
+     GROUP BY conversation_id`,
+    { replacements: { ids, userId }, type: QueryTypes.SELECT },
+  );
+  const lastRows = await sequelize.query<{
+    conversation_id: string;
+    body: string;
+    created_at: Date;
+  }>(
+    `SELECT DISTINCT ON (conversation_id) conversation_id, body, created_at
+     FROM messages
+     WHERE conversation_id IN (:ids)
+     ORDER BY conversation_id, created_at DESC`,
+    { replacements: { ids }, type: QueryTypes.SELECT },
+  );
+
+  const unreadMap = new Map(unreadRows.map((r) => [r.conversation_id, r.n]));
+  const lastMap = new Map(lastRows.map((r) => [r.conversation_id, r]));
+
+  return rows.map((c) => {
+    const last = lastMap.get(c.id);
+    return serializeConversationPreview(c, userId, {
+      lastMessage: last?.body ?? null,
+      lastMessageAt: last
+        ? new Date(last.created_at).toISOString()
+        : new Date(c.createdAt).toISOString(),
+      unread: unreadMap.get(c.id) ?? 0,
+    });
+  });
 }
 
 export async function getConversationFor(id: string, userId: string) {
@@ -467,10 +516,23 @@ export async function startConversation(params: {
   }
   if (!subject) subject = "New enquiry";
 
-  const [conversation, created] = await Conversation.findOrCreate({
-    where: { assetId, buyerId, sellerId },
-    defaults: { assetId, buyerId, sellerId, subject },
-  });
+  const where = assetId
+    ? { assetId, buyerId, sellerId }
+    : { assetId: { [Op.is]: null }, buyerId, sellerId };
+
+  let conversation = await Conversation.findOne({ where });
+  let created = false;
+  if (!conversation) {
+    try {
+      conversation = await Conversation.create({ assetId, buyerId, sellerId, subject });
+      created = true;
+    } catch (err) {
+      if (!(err instanceof UniqueConstraintError)) throw err;
+      conversation = await Conversation.findOne({ where });
+      if (!conversation) throw err;
+    }
+  }
+
   await Message.create({
     conversationId: conversation.id,
     senderId: actor.id,
@@ -492,10 +554,16 @@ async function touch(conversationId: string): Promise<void> {
 }
 
 export async function postMessage(conversationId: string, senderId: string, body: string) {
-  const { Conversation, Message } = db();
+  const { Conversation, Message, User } = db();
   const c = await Conversation.findByPk(conversationId);
   if (!c) throw notFound("Conversation not found");
   if (c.buyerId !== senderId && c.sellerId !== senderId) throw forbidden();
+
+  const counterpartId = c.buyerId === senderId ? c.sellerId : c.buyerId;
+  const other = await User.findByPk(counterpartId, { attributes: ["id", "status"] });
+  if (!other || other.status !== "active") {
+    throw forbidden("This participant is no longer active on the platform");
+  }
 
   const message = await Message.create({ conversationId, senderId, body });
   await touch(conversationId);

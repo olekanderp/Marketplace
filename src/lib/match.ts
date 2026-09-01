@@ -121,6 +121,10 @@ export interface AssetDraft {
 
 const REGULATED_SECTORS: readonly Sector[] = ["bank", "payment", "emi"];
 
+export function assetLooksComplete(d: AssetDraft): boolean {
+  return smartValidateAsset(d).length === 0;
+}
+
 export function smartValidateAsset(d: AssetDraft): string[] {
   const warnings: string[] = [];
 

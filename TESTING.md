@@ -44,13 +44,13 @@ npm run dev                     # http://localhost:3000
 ```bash
 npm run typecheck    # tsc --noEmit          → no output = clean
 npm run lint         # eslint .              → no output = clean
-npm test             # vitest run            → 42 passed
+npm test             # vitest run            → 48 passed
 npm run build        # next build            → Compiled successfully
 ```
 
 `npm test` covers the Smart Match engine, JWT signing/verification, all Zod
-schemas, and query-string parsing. It needs **no database** — the vitest config
-supplies the environment.
+schemas, number parsing, open-redirect guards, and query-string parsing. It needs
+**no database** — the vitest config supplies the environment.
 
 **Verify migrations apply to a genuinely empty database:**
 
@@ -130,7 +130,7 @@ mandates · 3 conversations · 6 messages.
    **Save as draft**. **Smart validation** lists what is missing (short description,
    no highlights, no price, no regulator for a regulated sector, no year).
 4. Fill it in properly and press **Publish**.
-5. `Browse buyers` → filter by sector / jurisdiction / free text → open a buyer →
+5. `Browse buyers` → filter by sector / jurisdiction / ticket size / free text → open a buyer →
    **Send message**.
 6. `My profile` → edit company name / about / website → **Save profile**.
 7. On the edit form, **Delete listing** requires a second click to confirm.
@@ -140,7 +140,8 @@ mandates · 3 conversations · 6 messages.
 2. **Assets** tab → suspend a listing → open `/listings` in a private window: it is gone.
 3. **Sellers** tab → suspend *Bianca Ferreira* → `/listings` drops from 14 to 12.
 4. **Reactivate** her → back to 14. Moderation is reversible; nothing is rewritten.
-5. Search across tabs; page through results (20 per page).
+5. Search across tabs; filter by status; page through results (20 per page).
+   Nav also has **Browse buyers** for full mandate profiles.
 
 ---
 
@@ -228,6 +229,43 @@ curl -s "$B/api/assets?perPage=48" | grep -o '"total":[0-9]*'                   
 
 Open `http://localhost:3000/login?next=https://example.com` and sign in.
 Expect to land on `/dashboard`, never on `example.com`.
+
+**#8 — contacting a buyer twice reuses the general thread**
+
+```bash
+FINN=00000000-0000-4000-8000-000000000020
+curl -s -b s.txt -X POST $B/api/conversations -H 'content-type: application/json' \
+  -d "{\"toUserId\":\"$FINN\",\"message\":\"hello again 1\"}" | grep -o '"id":"[^"]*"' | head -1
+curl -s -b s.txt -X POST $B/api/conversations -H 'content-type: application/json' \
+  -d "{\"toUserId\":\"$FINN\",\"message\":\"hello again 2\"}" | grep -o '"id":"[^"]*"' | head -1
+# expect: the same conversation id both times
+```
+
+**#9 — a published listing of a suspended seller is hidden from GET-by-id**
+
+```bash
+BRPI=00000000-0000-4000-8000-000000000102
+curl -s -o /dev/null -w '%{http_code}\n' $B/api/assets/$BRPI          # 200
+curl -s -b m.txt -X PATCH $B/api/admin/users/00000000-0000-4000-8000-000000000011 \
+  -H 'content-type: application/json' -d '{"status":"suspended"}' >/dev/null
+curl -s -o /dev/null -w '%{http_code}\n' $B/api/assets/$BRPI          # 404
+curl -s -b m.txt -o /dev/null -w '%{http_code}\n' $B/api/assets/$BRPI # 200 (manager)
+curl -s -b m.txt -X PATCH $B/api/admin/users/00000000-0000-4000-8000-000000000011 \
+  -H 'content-type: application/json' -d '{"status":"active"}' >/dev/null
+```
+
+**#10 — a removed account is not described as suspended**
+
+```bash
+BIANCA=00000000-0000-4000-8000-000000000011
+curl -s -b m.txt -X PATCH $B/api/admin/users/$BIANCA \
+  -H 'content-type: application/json' -d '{"status":"removed"}' >/dev/null
+curl -s -X POST $B/api/auth/login -H 'content-type: application/json' \
+  -d '{"email":"bianca.seller@n5deal.test","password":"Password123!"}'
+# expect: 403 "This account has been removed…"
+curl -s -b m.txt -X PATCH $B/api/admin/users/$BIANCA \
+  -H 'content-type: application/json' -d '{"status":"active"}' >/dev/null
+```
 
 ---
 

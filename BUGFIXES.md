@@ -168,7 +168,37 @@ signed token's own `exp` claim; the cookie uses that. The now-redundant
 
 ---
 
-## ⚪ Dead code and unreachable surface
+## Second review pass
+
+### 🟠 Significant
+
+| # | Issue | Fix |
+|---|---|---|
+| 36 | Unique `(asset_id, buyer_id, seller_id)` never deduped general threads — PostgreSQL treats `NULL ≠ NULL`, so a seller contacting the same buyer twice spawned a new conversation each time | partial unique index `WHERE asset_id IS NULL` + find-then-create with `IS NULL` |
+| 37 | `GET /api/assets/:id` returned a published listing even when its seller was suspended, unlike the page | same `assetIsPubliclyVisible()` gate as the detail page |
+| 38 | Inbox list loaded every message of every thread just to compute a snippet and unread count | list query now uses two aggregate SQL lookups; full messages only on the thread page |
+| 39 | Buyer browse filtered sectors/jurisdictions in memory after fetching every profile | filters pushed into SQL (`jsonb_exists_any` / `jsonb_array_elements_text`) with real pagination |
+| 40 | "Validated" badge on every public card, including thin drafts that just got published | shown only when `smartValidateAsset` is clean |
+| 41 | Admin could only free-text search, despite the assignment asking to filter participants and assets | status dropdown on all three tabs; search preserves the current tab |
+
+### 🟡 Minor
+
+| # | Issue | Fix |
+|---|---|---|
+| 42 | Removed accounts were told they were "suspended" | distinct login messages |
+| 43 | Non-JSON error bodies crashed `apiFetch` with a parse exception | JSON.parse is guarded |
+| 44 | `GET /api/assets` re-fetched the buyer mandate inline instead of `getMandate()` | uses the shared helper |
+| 45 | Price filter inputs were uncontrolled and drifted from the URL after Clear all | controlled + synced from search params |
+| 46 | Ticket filter existed on the buyers API with no UI | ticket-size input on Browse buyers |
+| 47 | Buyer mandate `num()` turned `"abc"` into `0` | shared `parseDigits()` returns null |
+| 48 | Open-redirect guard missed `/\evil` and `://` in the path | `safeNextPath()` |
+| 49 | Messaging a suspended counterpart still worked | replies are refused; thread stays readable |
+| 50 | Manager had no nav link to buyer profiles | Browse buyers added to manager nav |
+| 51 | Demo "one-click" buttons only filled the form | they now sign in |
+
+---
+
+## ⚪ Dead code and unreachable surface (first pass)
 
 | # | What | Action |
 |---|---|---|
@@ -207,7 +237,7 @@ filtering, ranking and moderation have realistic data to work against.
 ```
 tsc --noEmit      clean
 eslint .          clean
-vitest run        42 passed (was 22)
+vitest run        48 passed
 next build        clean
 ```
 

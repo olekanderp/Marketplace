@@ -1,10 +1,9 @@
 import type { NextRequest } from "next/server";
 import { getCurrentUser, requireApiRole } from "@/lib/auth/session";
-import { db } from "@/lib/db";
 import { handle, jsonOk, readJson } from "@/lib/http";
-import { smartValidateAsset, type Mandate } from "@/lib/match";
+import { smartValidateAsset } from "@/lib/match";
 import { searchParamsToObject } from "@/lib/query";
-import { createAsset, listAssets } from "@/lib/repo";
+import { createAsset, getMandate, listAssets } from "@/lib/repo";
 import { assetCreateSchema, assetQuerySchema } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
@@ -13,20 +12,8 @@ export async function GET(request: NextRequest) {
       searchParamsToObject(request.nextUrl.searchParams, ["sector", "country", "businessStatus"]),
     );
 
-    let mandate: Mandate | null = null;
     const user = await getCurrentUser();
-    if (user?.role === "buyer") {
-      const profile = await db().BuyerProfile.findOne({ where: { userId: user.id } });
-      if (profile) {
-        mandate = {
-          targetSectors: profile.targetSectors ?? [],
-          targetJurisdictions: profile.targetJurisdictions ?? [],
-          ticketMin: profile.ticketMin ?? null,
-          ticketMax: profile.ticketMax ?? null,
-        };
-      }
-    }
-
+    const mandate = user?.role === "buyer" ? await getMandate(user.id) : null;
     const result = await listAssets(query, { scope: "published", mandate });
     return jsonOk(result);
   });

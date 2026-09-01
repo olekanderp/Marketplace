@@ -13,6 +13,9 @@ export async function POST(request: Request) {
     const user = await User.findOne({ where: { email: input.email } });
     const ok = user ? await verifyPassword(input.password, user.passwordHash) : false;
     if (!user || !ok) throw new ApiError(401, "Incorrect email or password");
+    if (user.status === "removed") {
+      throw new ApiError(403, "This account has been removed. Contact the platform team.");
+    }
     if (user.status !== "active") {
       throw new ApiError(403, "This account has been suspended. Contact the platform team.");
     }

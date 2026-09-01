@@ -22,7 +22,14 @@ export async function apiFetch<T = unknown>(
   });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  let data: { error?: unknown; details?: unknown } = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as { error?: unknown; details?: unknown };
+    } catch {
+      data = {};
+    }
+  }
 
   if (!res.ok) {
     throw new ApiClientError(

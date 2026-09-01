@@ -9,7 +9,7 @@ import { StatusBadge, ValidatedBadge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { BUSINESS_STATUS_LABELS, SECTOR_LABELS } from "@/lib/domain";
 import { formatMoneyFull } from "@/lib/format";
-import { matchAssetForMandate } from "@/lib/match";
+import { assetLooksComplete, matchAssetForMandate } from "@/lib/match";
 import {
   assetIsPubliclyVisible,
   assetOwnedBy,
@@ -68,11 +68,11 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
               <span className="tag">{SECTOR_LABELS[asset.sector]}</span>
               <h1 className="mt-2 text-xl font-semibold leading-tight">{asset.title}</h1>
             </div>
-            {asset.status === "published" ? (
-              <ValidatedBadge />
-            ) : (
+            {asset.status !== "published" ? (
               <StatusBadge status={asset.status} />
-            )}
+            ) : assetLooksComplete(asset) ? (
+              <ValidatedBadge />
+            ) : null}
           </div>
 
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">

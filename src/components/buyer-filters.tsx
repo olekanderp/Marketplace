@@ -11,6 +11,7 @@ export function BuyerFilters({ total }: { total: number }) {
   const [pending, start] = useTransition();
   const [q, setQ] = useState(sp.get("q") ?? "");
   const [jur, setJur] = useState(sp.get("jurisdiction") ?? "");
+  const [ticket, setTicket] = useState(sp.get("ticket") ?? "");
   const sectors = sp.getAll("sector");
 
   function push(next: URLSearchParams) {
@@ -30,17 +31,26 @@ export function BuyerFilters({ total }: { total: number }) {
 
   useEffect(() => {
     const id = setTimeout(() => {
-      if ((sp.get("q") ?? "") === q && (sp.get("jurisdiction") ?? "") === jur) return;
+      if (
+        (sp.get("q") ?? "") === q &&
+        (sp.get("jurisdiction") ?? "") === jur &&
+        (sp.get("ticket") ?? "") === ticket
+      ) {
+        return;
+      }
       const next = new URLSearchParams(sp.toString());
       if (q) next.set("q", q);
       else next.delete("q");
       if (jur) next.set("jurisdiction", jur);
       else next.delete("jurisdiction");
+      const digits = ticket.replace(/\D/g, "");
+      if (digits) next.set("ticket", digits);
+      else next.delete("ticket");
       push(next);
     }, 350);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, jur]);
+  }, [q, jur, ticket]);
 
   return (
     <div className="space-y-3">
@@ -59,6 +69,13 @@ export function BuyerFilters({ total }: { total: number }) {
       <div className="flex flex-wrap items-center gap-2">
         <input className="input max-w-xs" placeholder="Search mandate…" value={q} onChange={(e) => setQ(e.target.value)} />
         <input className="input max-w-[12rem]" placeholder="Jurisdiction" value={jur} onChange={(e) => setJur(e.target.value)} />
+        <input
+          className="input max-w-[10rem]"
+          inputMode="numeric"
+          placeholder="Ticket size"
+          value={ticket}
+          onChange={(e) => setTicket(e.target.value)}
+        />
         <span className="ml-auto text-[13px] text-muted">
           {pending ? "Updating…" : `${total} buyer${total === 1 ? "" : "s"}`}
         </span>

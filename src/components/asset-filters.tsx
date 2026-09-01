@@ -30,6 +30,8 @@ export function AssetFilters({
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState(sp.get("q") ?? "");
+  const [priceMin, setPriceMin] = useState(sp.get("priceMin") ?? "");
+  const [priceMax, setPriceMax] = useState(sp.get("priceMax") ?? "");
 
   const current = useMemo(() => new URLSearchParams(sp.toString()), [sp]);
   const sectors = current.getAll("sector");
@@ -39,6 +41,13 @@ export function AssetFilters({
   function commit(next: URLSearchParams) {
     next.delete("page");
     startTransition(() => router.push(`${pathname}?${next.toString()}`, { scroll: false }));
+  }
+
+  function clearAll() {
+    setQ("");
+    setPriceMin("");
+    setPriceMax("");
+    startTransition(() => router.push(pathname, { scroll: false }));
   }
 
   function toggleMulti(key: string, value: string) {
@@ -184,14 +193,16 @@ export function AssetFilters({
                 className="input"
                 inputMode="numeric"
                 placeholder="Min"
-                defaultValue={current.get("priceMin") ?? ""}
+                value={priceMin}
+                onChange={(e) => setPriceMin(e.target.value)}
                 onBlur={(e) => setSingle("priceMin", e.target.value.replace(/\D/g, ""))}
               />
               <input
                 className="input"
                 inputMode="numeric"
                 placeholder="Max"
-                defaultValue={current.get("priceMax") ?? ""}
+                value={priceMax}
+                onChange={(e) => setPriceMax(e.target.value)}
                 onBlur={(e) => setSingle("priceMax", e.target.value.replace(/\D/g, ""))}
               />
             </div>
@@ -203,11 +214,7 @@ export function AssetFilters({
               />
               Include “on LOI” listings
             </label>
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => startTransition(() => router.push(pathname, { scroll: false }))}
-            >
+            <button type="button" className="btn-ghost btn-sm" onClick={clearAll}>
               Clear all
             </button>
           </fieldset>

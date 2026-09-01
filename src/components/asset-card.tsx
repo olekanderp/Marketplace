@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SECTOR_LABELS } from "@/lib/domain";
 import { formatPrice } from "@/lib/format";
-import type { MatchResult } from "@/lib/match";
+import { assetLooksComplete, type MatchResult } from "@/lib/match";
 import type { AssetDTO } from "@/lib/serialize";
 import { MatchBadge } from "./match-badge";
 import { Sparkline } from "./sparkline";
@@ -39,7 +39,11 @@ export function AssetCard({
             </Link>
           </h3>
         </div>
-        {showStatus ? <StatusBadge status={asset.status} /> : <ValidatedBadge />}
+        {showStatus ? (
+          <StatusBadge status={asset.status} />
+        ) : assetLooksComplete(asset) ? (
+          <ValidatedBadge />
+        ) : null}
       </div>
 
       <dl className="field-grid mt-3">

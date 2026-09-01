@@ -17,20 +17,8 @@ export function ContactForm({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState(defaultMessage);
-  const [state, setState] = useState<"idle" | "sending" | "done">("idle");
+  const [state, setState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
-
-  if (state === "done") {
-    return (
-      <div className="card border-positive-600/30 bg-positive-50 p-4 text-[14px] text-positive-700">
-        Message sent. Continue the conversation in your{" "}
-        <button className="underline" onClick={() => router.push("/inbox")}>
-          inbox
-        </button>
-        .
-      </div>
-    );
-  }
 
   return (
     <form
@@ -44,7 +32,6 @@ export function ContactForm({
             method: "POST",
             body: JSON.stringify({ toUserId, assetId, message }),
           });
-          setState("done");
           router.refresh();
           router.push(`/inbox/${res.conversation.id}`);
         } catch (err) {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AssetCard } from "@/components/asset-card";
-import { MatchBadge } from "@/components/match-badge";
+import { BuyerCard } from "@/components/buyer-card";
 import { requireUser } from "@/lib/auth/session";
 import {
   listConversationsFor,
@@ -60,17 +60,7 @@ export default async function DashboardPage() {
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {buyerMatches.items.slice(0, 4).map(({ buyer, match }) => (
-                <Link
-                  key={buyer.id}
-                  href={`/buyers/${buyer.userId}`}
-                  className="card flex items-start justify-between gap-3 p-4 hover:shadow-sm"
-                >
-                  <div>
-                    <p className="font-medium">{buyer.user?.name}</p>
-                    <p className="mt-0.5 line-clamp-2 text-[13px] text-muted">{buyer.headline}</p>
-                  </div>
-                  <MatchBadge match={match} />
-                </Link>
+                <BuyerCard key={buyer.id} buyer={buyer} match={match} />
               ))}
             </div>
           </section>

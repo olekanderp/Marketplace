@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, describeApiError } from "@/lib/api-client";
 import { CURRENCIES, SECTORS, SECTOR_LABELS, type Currency, type Sector } from "@/lib/domain";
+import { parseDigits } from "@/lib/format";
 
 interface Values {
   headline: string;
@@ -56,7 +57,7 @@ export function BuyerProfileForm({ initial }: { initial: Values }) {
     }
   }
 
-  const num = (s: string) => (s.trim() === "" ? null : Number(s.replace(/\D/g, "")));
+  const num = parseDigits;
 
   return (
     <form onSubmit={submit} className="card space-y-5 p-5">

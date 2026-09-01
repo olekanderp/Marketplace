@@ -4,7 +4,14 @@ import { AdminUserControls } from "@/components/admin-user-controls";
 import { Pagination } from "@/components/pagination";
 import { StatusBadge } from "@/components/status-badge";
 import { requireRole } from "@/lib/auth/session";
-import { ASSET_STATUS_LABELS, SECTOR_LABELS } from "@/lib/domain";
+import {
+  ASSET_STATUSES,
+  ASSET_STATUS_LABELS,
+  SECTOR_LABELS,
+  USER_STATUSES,
+  type AssetStatus,
+  type UserStatus,
+} from "@/lib/domain";
 import { formatPrice } from "@/lib/format";
 import { searchParamsToObject, toURLSearchParams } from "@/lib/query";
 import { adminListUsers, listAssets } from "@/lib/repo";
@@ -29,12 +36,20 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   const rawTab = sp.get("tab") ?? "assets";
   const tab: Tab = isTab(rawTab) ? rawTab : "assets";
   const q = sp.get("q") ?? "";
+  const status = sp.get("status") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
 
   const makeHref = (p: number) => {
     const next = new URLSearchParams(sp.toString());
     next.set("tab", tab);
     next.set("page", String(p));
+    return `/admin?${next.toString()}`;
+  };
+
+  const tabHref = (value: Tab) => {
+    const next = new URLSearchParams();
+    next.set("tab", value);
+    if (q) next.set("q", q);
     return `/admin?${next.toString()}`;
   };
 
@@ -52,14 +67,28 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
         {TABS.map(([value, label]) => (
           <Link
             key={value}
-            href={`/admin?tab=${value}`}
+            href={tabHref(value)}
             className={`pill ${tab === value ? "pill-active" : ""}`}
           >
             {label}
           </Link>
         ))}
-        <form className="ml-auto flex gap-2" action="/admin">
+        <form className="ml-auto flex flex-wrap gap-2" action="/admin">
           <input type="hidden" name="tab" value={tab} />
+          <select name="status" defaultValue={status} className="input btn-sm w-auto" aria-label="Status">
+            <option value="">All statuses</option>
+            {tab === "assets"
+              ? ASSET_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {ASSET_STATUS_LABELS[s]}
+                  </option>
+                ))
+              : USER_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+          </select>
           <input
             name="q"
             defaultValue={q}
@@ -72,11 +101,12 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
       </div>
 
       {tab === "assets" ? (
-        <AdminAssets q={q} page={page} makeHref={makeHref} />
+        <AdminAssets q={q} status={status} page={page} makeHref={makeHref} />
       ) : (
         <AdminUsers
           role={tab === "sellers" ? "seller" : "buyer"}
           q={q}
+          status={status}
           page={page}
           makeHref={makeHref}
         />
@@ -87,10 +117,12 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
 
 async function AdminAssets({
   q,
+  status,
   page,
   makeHref,
 }: {
   q: string;
+  status: string;
   page: number;
   makeHref: (p: number) => string;
 }) {
@@ -99,7 +131,10 @@ async function AdminAssets({
       new URLSearchParams({ q, page: String(page), perPage: "20", sort: "newest" }),
     ),
   );
-  const { items, total, pageCount } = await listAssets(query, { scope: "all" });
+  const statuses = ASSET_STATUSES.includes(status as AssetStatus)
+    ? [status as AssetStatus]
+    : undefined;
+  const { items, total, pageCount } = await listAssets(query, { scope: "all", statuses });
 
   return (
     <div className="space-y-3">
@@ -129,17 +164,20 @@ async function AdminAssets({
 async function AdminUsers({
   role,
   q,
+  status,
   page,
   makeHref,
 }: {
   role: "buyer" | "seller";
   q: string;
+  status: string;
   page: number;
   makeHref: (p: number) => string;
 }) {
   const { items, total, pageCount } = await adminListUsers({
     role,
     q: q || undefined,
+    status: USER_STATUSES.includes(status as UserStatus) ? (status as UserStatus) : undefined,
     page,
     perPage: 20,
   });

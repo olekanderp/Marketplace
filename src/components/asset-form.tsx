@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, describeApiError } from "@/lib/api-client";
+import { parseDigits } from "@/lib/format";
 import {
   BUSINESS_STATUSES,
   BUSINESS_STATUS_LABELS,
@@ -48,11 +49,6 @@ export const EMPTY_ASSET: AssetFormValues = {
   status: "draft",
 };
 
-function parseNumber(raw: string): number | null {
-  const digits = raw.replace(/[^\d]/g, "");
-  return digits === "" ? null : Number(digits);
-}
-
 export function AssetForm({
   mode,
   assetId,
@@ -86,8 +82,8 @@ export function AssetForm({
       const payload = {
         ...v,
         status: nextStatus ?? v.status,
-        askingPrice: parseNumber(priceText),
-        yearIssued: parseNumber(yearText),
+        askingPrice: parseDigits(priceText),
+        yearIssued: parseDigits(yearText),
         highlights: highlights
           .split(",")
           .map((s) => s.trim())

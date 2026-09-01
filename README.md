@@ -4,6 +4,17 @@ A working full-stack prototype of an M&A marketplace for **regulated financial a
 (licensed banks, EMIs, payment institutions, crypto/forex companies). Built for a
 technical assignment; not a real service.
 
+**Live demo:** [https://n5deal-snowy.vercel.app](https://n5deal-snowy.vercel.app)
+
+Password for all demo accounts: **`Password123!`** — or use the one-click buttons on
+[`/login`](https://n5deal-snowy.vercel.app/login).
+
+| Role | Login |
+| --- | --- |
+| Buyer | `buyer@n5deal.test` |
+| Seller | `seller@n5deal.test` |
+| Manager | `manager@n5deal.test` |
+
 | Role | Can |
 | --- | --- |
 | **Buyer** | maintain an acquisition *mandate*, browse & filter assets, get Smart-Match-ranked results, contact sellers |
@@ -66,7 +77,7 @@ npm run dev                   # http://localhost:3000
 | `npm run dev` / `build` / `start` | Next.js dev / production build / production server |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest — 42 unit tests, no database needed |
+| `npm test` | Vitest — 48 unit tests, no database needed |
 | `npm run db:migrate` / `db:seed` | apply schema / load demo data |
 | `npm run db:reset` | undo seeds + migrations, re-apply, re-seed |
 
@@ -81,8 +92,8 @@ route handlers under `/api/*`, so the same logic backs both the UI and any exter
 client.
 
 **PostgreSQL + Sequelize, schema by migration.** State lives in Postgres, so a
-refresh — or a different device — just works. The schema is created by a single
-**sequelize-cli migration**; demo data is loaded by **sequelize-cli seeders** with
+refresh — or a different device — just works. The schema is created by
+**sequelize-cli migrations**; demo data is loaded by **sequelize-cli seeders** with
 fixed UUIDs and `seederStorage: "sequelize"`, which makes migrate+seed idempotent and
 safe to run on every container start. `sequelize.sync()` is deliberately **not** used.
 
@@ -154,7 +165,7 @@ min/max price filters unless the buyer opts in.
 - Country filter options come from the listings actually in the database, not a
   hardcoded list, so a seller-entered jurisdiction is immediately filterable.
 - Listing cards mirror the N5Deal reference: country, licence type, business status,
-  asking price, "Included" highlight tags, a "Validated" marker, an indicative trend
+  asking price, an earned "Validated" marker (only when Smart Validation is clean), an indicative trend
   sparkline, view count.
 - "Contact" is in-app messaging (a `Conversation` + `Message`), reachable from both an
   asset page and a buyer profile, with a shared inbox and unread counts.

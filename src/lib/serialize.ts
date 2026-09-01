@@ -115,14 +115,9 @@ export function serializeMessage(m: Message) {
   };
 }
 
-export function serializeConversation(c: Conversation, viewerId: string) {
+function conversationShell(c: Conversation, viewerId: string) {
   const viewerIsBuyer = c.buyerId === viewerId;
   const counterpart = viewerIsBuyer ? c.seller : c.buyer;
-  const messages = Array.isArray(c.messages)
-    ? [...c.messages].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
-    : [];
-  const last = messages.at(-1);
-
   return {
     id: c.id,
     subject: c.subject,
@@ -140,10 +135,34 @@ export function serializeConversation(c: Conversation, viewerId: string) {
           active: counterpart.status === "active",
         }
       : null,
-    messages: messages.map(serializeMessage),
-    lastMessage: last ? last.body : null,
-    lastMessageAt: last ? isoRequired(last.createdAt) : isoRequired(c.createdAt),
-    unread: messages.filter((m) => m.senderId !== viewerId && !m.readAt).length,
     createdAt: isoRequired(c.createdAt),
+  };
+}
+
+export function serializeConversationPreview(
+  c: Conversation,
+  viewerId: string,
+  extra: { lastMessage: string | null; lastMessageAt: string; unread: number },
+) {
+  return {
+    ...conversationShell(c, viewerId),
+    lastMessage: extra.lastMessage,
+    lastMessageAt: extra.lastMessageAt,
+    unread: extra.unread,
+  };
+}
+
+export function serializeConversation(c: Conversation, viewerId: string) {
+  const messages = Array.isArray(c.messages)
+    ? [...c.messages].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
+    : [];
+  const last = messages.at(-1);
+  return {
+    ...serializeConversationPreview(c, viewerId, {
+      lastMessage: last ? last.body : null,
+      lastMessageAt: last ? isoRequired(last.createdAt) : isoRequired(c.createdAt),
+      unread: messages.filter((m) => m.senderId !== viewerId && !m.readAt).length,
+    }),
+    messages: messages.map(serializeMessage),
   };
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, describeApiError } from "@/lib/api-client";
+import { safeNextPath } from "@/lib/format";
 
 const DEMO_PASSWORD = "Password123!";
 
@@ -13,28 +14,24 @@ const DEMO = [
   ["Manager", "manager@n5deal.test"],
 ] as const;
 
-function safeNext(raw: string | null): string | null {
-  if (!raw) return null;
-  return raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
-}
-
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = safeNext(params.get("next"));
+  const next = safeNextPath(params.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function signIn(nextEmail: string, nextPassword: string) {
     setBusy(true);
     setError(null);
+    setEmail(nextEmail);
+    setPassword(nextPassword);
     try {
       const res = await apiFetch<{ user: { role: "buyer" | "seller" | "manager" } }>(
         "/api/auth/login",
-        { method: "POST", body: JSON.stringify({ email, password }) },
+        { method: "POST", body: JSON.stringify({ email: nextEmail, password: nextPassword }) },
       );
       router.push(next ?? (res.user.role === "manager" ? "/admin" : "/dashboard"));
       router.refresh();
@@ -45,7 +42,13 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void signIn(email, password);
+      }}
+      className="mt-6 space-y-4"
+    >
       <div>
         <label className="label" htmlFor="email">
           Email
@@ -94,10 +97,7 @@ export function LoginForm() {
               key={addr}
               type="button"
               className="pill !py-0.5 !text-[12px]"
-              onClick={() => {
-                setEmail(addr);
-                setPassword(DEMO_PASSWORD);
-              }}
+              onClick={() => void signIn(addr, DEMO_PASSWORD)}
             >
               {label}
             </button>

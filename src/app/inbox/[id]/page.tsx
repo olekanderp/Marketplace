@@ -41,6 +41,12 @@ export default async function ConversationPage({ params }: PageProps<"/inbox/[id
             </>
           )}
         </p>
+        {conversation.counterpart && !conversation.counterpart.active && (
+          <p className="mt-2 rounded-lg bg-warn-50 px-3 py-2 text-[13px] text-warn-600">
+            This participant is no longer active. You can read the thread but cannot send new
+            messages.
+          </p>
+        )}
       </header>
 
       <div className="space-y-2">
@@ -63,7 +69,9 @@ export default async function ConversationPage({ params }: PageProps<"/inbox/[id
         })}
       </div>
 
-      <MessageComposer conversationId={conversation.id} />
+      {conversation.counterpart?.active !== false && (
+        <MessageComposer conversationId={conversation.id} />
+      )}
     </div>
   );
 }
