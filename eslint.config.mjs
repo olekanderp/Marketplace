@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // CommonJS files consumed by sequelize-cli — not part of the app bundle.
+    "config/**",
+    "db/**",
   ]),
 ]);
 

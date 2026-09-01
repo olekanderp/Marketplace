@@ -32,8 +32,10 @@ export function BuyerFilters({ total }: { total: number }) {
     const id = setTimeout(() => {
       if ((sp.get("q") ?? "") === q && (sp.get("jurisdiction") ?? "") === jur) return;
       const next = new URLSearchParams(sp.toString());
-      q ? next.set("q", q) : next.delete("q");
-      jur ? next.set("jurisdiction", jur) : next.delete("jurisdiction");
+      if (q) next.set("q", q);
+      else next.delete("q");
+      if (jur) next.set("jurisdiction", jur);
+      else next.delete("jurisdiction");
       push(next);
     }, 350);
     return () => clearTimeout(id);
