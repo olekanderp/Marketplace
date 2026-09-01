@@ -1,3 +1,16 @@
+type RawSearchParams = Record<string, string | string[] | undefined>;
+
+/** Build a URLSearchParams from Next's `searchParams` page prop shape. */
+export function toURLSearchParams(raw: RawSearchParams): URLSearchParams {
+  const sp = new URLSearchParams();
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) for (const v of value) sp.append(key, v);
+    else sp.set(key, value);
+  }
+  return sp;
+}
+
 /** Turn a URLSearchParams into a plain object, collecting repeated keys as arrays. */
 export function searchParamsToObject(
   sp: URLSearchParams,

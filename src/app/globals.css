@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
+@theme {
+  --color-ink: #0b0b12;
+  --color-muted: #5b6170;
+  --color-line: #e6e7eb;
+  --color-surface: #ffffff;
+  --color-canvas: #f7f7f9;
+
+  --color-brand-50: #eef0ff;
+  --color-brand-100: #e0e3ff;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+
+  --color-positive-50: #ecfdf5;
+  --color-positive-600: #059669;
+  --color-positive-700: #047857;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-600: #b45309;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-600: #dc2626;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-brand,
+  .btn-ghost {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-full px-4 py-2
+      text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600
+      focus-visible:ring-offset-2;
+  }
+  .btn-primary {
+    @apply bg-ink text-white hover:bg-black;
+  }
+  .btn-brand {
+    @apply bg-brand-600 text-white hover:bg-brand-700;
+  }
+  .btn-ghost {
+    @apply border border-line bg-surface text-ink hover:bg-canvas;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-[13px];
+  }
+
+  .pill {
+    @apply inline-flex cursor-pointer items-center gap-1 rounded-full border border-line bg-surface
+      px-3 py-1 text-[13px] font-medium text-muted transition-colors;
+  }
+  .pill-active {
+    @apply border-ink bg-ink text-white;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink
+      placeholder:text-muted/70 focus:border-brand-500 focus:outline-none focus:ring-2
+      focus:ring-brand-100;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-muted;
+  }
+  .tag {
+    @apply inline-flex items-center rounded-md bg-brand-50 px-2 py-0.5 text-[12px] font-medium
+      text-brand-700;
+  }
+  .field-grid {
+    @apply grid grid-cols-2 gap-2 sm:grid-cols-4;
+  }
 }

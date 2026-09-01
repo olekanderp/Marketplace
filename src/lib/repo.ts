@@ -245,6 +245,18 @@ function pruneUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 
 /* ── profiles ─────────────────────────────────────────────────────────── */
 
+export async function getMandate(userId: string): Promise<Mandate | null> {
+  const { BuyerProfile } = db();
+  const p = await BuyerProfile.findOne({ where: { userId } });
+  if (!p) return null;
+  return {
+    targetSectors: p.targetSectors ?? [],
+    targetJurisdictions: p.targetJurisdictions ?? [],
+    ticketMin: p.ticketMin ?? null,
+    ticketMax: p.ticketMax ?? null,
+  };
+}
+
 export async function getBuyerProfile(userId: string) {
   const { BuyerProfile } = db();
   const p = await BuyerProfile.findOne({ where: { userId }, include: [{ association: "user", attributes: ["id", "name", "role"] }] });
