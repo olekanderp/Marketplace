@@ -1,7 +1,4 @@
 #!/bin/sh
-# Applied by the `migrate` compose service before the app starts.
-# Idempotent: migrations and seeders are tracked in the database, so this is
-# safe to run on every `docker compose up`.
 set -e
 
 echo "› waiting for the database…"
