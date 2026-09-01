@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   BUSINESS_STATUSES,
   BUSINESS_STATUS_LABELS,
-  COUNTRIES,
   CURRENCIES,
   SECTORS,
   SECTOR_LABELS,
@@ -18,7 +17,13 @@ const SORTS = [
   ["price_desc", "Price ↓"],
 ] as const;
 
-export function AssetFilters({ total }: { total: number }) {
+export function AssetFilters({
+  total,
+  countries: countryOptions,
+}: {
+  total: number;
+  countries: string[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -53,7 +58,6 @@ export function AssetFilters({ total }: { total: number }) {
     commit(next);
   }
 
-  // Debounced free-text search.
   useEffect(() => {
     const id = setTimeout(() => {
       if ((sp.get("q") ?? "") === q) return;
@@ -132,7 +136,7 @@ export function AssetFilters({ total }: { total: number }) {
           <fieldset>
             <legend className="label">Jurisdiction</legend>
             <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-              {COUNTRIES.map((c) => (
+              {[...new Set([...countryOptions, ...countries])].sort().map((c) => (
                 <label key={c} className="flex items-center gap-2 text-[13px]">
                   <input
                     type="checkbox"

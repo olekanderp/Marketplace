@@ -16,8 +16,6 @@ import type {
   UserStatus,
 } from "@/lib/domain";
 
-/* ────────────────────────────── User ────────────────────────────── */
-
 export class User extends Model<
   InferAttributes<User>,
   InferCreationAttributes<User>
@@ -35,8 +33,6 @@ export class User extends Model<
   declare sellerProfile?: NonAttribute<SellerProfile | null>;
   declare assets?: NonAttribute<Asset[]>;
 }
-
-/* ────────────────────────── BuyerProfile ────────────────────────── */
 
 export class BuyerProfile extends Model<
   InferAttributes<BuyerProfile>,
@@ -58,8 +54,6 @@ export class BuyerProfile extends Model<
   declare user?: NonAttribute<User>;
 }
 
-/* ────────────────────────── SellerProfile ───────────────────────── */
-
 export class SellerProfile extends Model<
   InferAttributes<SellerProfile>,
   InferCreationAttributes<SellerProfile>
@@ -74,8 +68,6 @@ export class SellerProfile extends Model<
 
   declare user?: NonAttribute<User>;
 }
-
-/* ────────────────────────────── Asset ───────────────────────────── */
 
 export class Asset extends Model<
   InferAttributes<Asset>,
@@ -104,8 +96,6 @@ export class Asset extends Model<
   declare seller?: NonAttribute<User>;
 }
 
-/* ─────────────────────────── Conversation ───────────────────────── */
-
 export class Conversation extends Model<
   InferAttributes<Conversation>,
   InferCreationAttributes<Conversation>
@@ -124,8 +114,6 @@ export class Conversation extends Model<
   declare messages?: NonAttribute<Message[]>;
 }
 
-/* ───────────────────────────── Message ──────────────────────────── */
-
 export class Message extends Model<
   InferAttributes<Message>,
   InferCreationAttributes<Message>
@@ -141,8 +129,6 @@ export class Message extends Model<
   declare sender?: NonAttribute<User>;
   declare conversation?: NonAttribute<Conversation>;
 }
-
-/* ─────────────────────────── Registration ───────────────────────── */
 
 export interface Models {
   sequelize: Sequelize;
@@ -291,7 +277,6 @@ export function registerModels(sequelize: Sequelize): Models {
     { sequelize, tableName: "messages", modelName: "Message" },
   );
 
-  /* Associations */
   User.hasMany(Asset, { foreignKey: "sellerId", as: "assets" });
   Asset.belongsTo(User, { foreignKey: "sellerId", as: "seller" });
 

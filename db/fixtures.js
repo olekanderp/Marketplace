@@ -1,9 +1,5 @@
 "use strict";
 
-/**
- * Deterministic demo dataset shared by the seeders.
- * Fixed UUIDs keep the seeders idempotent and let us wire up relations by hand.
- */
 const bcrypt = require("bcryptjs");
 
 const PASSWORD = "Password123!";
@@ -14,15 +10,13 @@ const daysAgo = (n) => new Date(Date.now() - n * day);
 
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-/* ── Users ───────────────────────────────────────────────────────────── */
-
 const U = {
   manager: id(1),
   sellerAlex: id(10),
   sellerBianca: id(11),
   sellerCaio: id(12),
   sellerDana: id(13),
-  sellerSpam: id(19), // suspended — demonstrates moderation
+  sellerSpam: id(19),
   buyerFinn: id(20),
   buyerGreta: id(21),
   buyerHugo: id(22),
@@ -33,20 +27,18 @@ const U = {
 
 const users = [
   { id: U.manager, email: "manager@n5deal.test", name: "Morgan Platform", role: "manager", status: "active" },
-  { id: U.sellerAlex, email: "alex.seller@n5deal.test", name: "Alex Nakamura", role: "seller", status: "active" },
+  { id: U.sellerAlex, email: "seller@n5deal.test", name: "Alex Nakamura", role: "seller", status: "active" },
   { id: U.sellerBianca, email: "bianca.seller@n5deal.test", name: "Bianca Ferreira", role: "seller", status: "active" },
   { id: U.sellerCaio, email: "caio.seller@n5deal.test", name: "Caio Almeida", role: "seller", status: "active" },
   { id: U.sellerDana, email: "dana.seller@n5deal.test", name: "Dana Volkov", role: "seller", status: "active" },
   { id: U.sellerSpam, email: "flagged.seller@n5deal.test", name: "Quick Flip Holdings", role: "seller", status: "suspended" },
-  { id: U.buyerFinn, email: "finn.buyer@n5deal.test", name: "Finn Larsson", role: "buyer", status: "active" },
+  { id: U.buyerFinn, email: "buyer@n5deal.test", name: "Finn Larsson", role: "buyer", status: "active" },
   { id: U.buyerGreta, email: "greta.buyer@n5deal.test", name: "Greta Hoffmann", role: "buyer", status: "active" },
   { id: U.buyerHugo, email: "hugo.buyer@n5deal.test", name: "Hugo Marchetti", role: "buyer", status: "active" },
   { id: U.buyerInes, email: "ines.buyer@n5deal.test", name: "Inês Costa", role: "buyer", status: "active" },
   { id: U.buyerJack, email: "jack.buyer@n5deal.test", name: "Jack Thompson", role: "buyer", status: "active" },
   { id: U.buyerKira, email: "kira.buyer@n5deal.test", name: "Kira Blum", role: "buyer", status: "active" },
 ];
-
-/* ── Profiles ────────────────────────────────────────────────────────── */
 
 const sellerProfiles = [
   { userId: U.sellerAlex, companyName: "Meridian Licensing Partners", about: "We build and exit regulated payment and EMI structures across the EEA and UK.", website: "https://meridian.example.com" },
@@ -111,8 +103,6 @@ const buyerProfiles = [
     ticketMin: null, ticketMax: null, currency: "USD",
   },
 ];
-
-/* ── Assets ──────────────────────────────────────────────────────────── */
 
 const A = {
   ltEmi: id(100), deBank: id(101), brPi: id(102), ltCasp: id(103),
@@ -308,8 +298,6 @@ const assets = [
     status: "suspended", views: 3, createdAt: daysAgo(4),
   },
 ];
-
-/* ── Conversations ───────────────────────────────────────────────────── */
 
 const C = { finnAlex: id(300), jackAlex: id(301), inesBianca: id(302) };
 

@@ -6,18 +6,10 @@ import { env } from "@/lib/env";
 import type { Role } from "@/lib/domain";
 import { forbidden, unauthorized } from "@/lib/http";
 import { signAccessToken, verifyAccessToken, type AccessClaims } from "./jwt";
-import { SESSION_MAX_AGE, TOKEN_COOKIE } from "./constants";
+import { TOKEN_COOKIE } from "./constants";
 
 export { TOKEN_COOKIE };
-const MAX_AGE = SESSION_MAX_AGE;
 
-/**
- * Resolve the request's user from the JWT cookie.
- *
- * The token is only trusted for identity — account `status` is re-read from the
- * database on every request so a suspended/removed user with a still-valid
- * token is rejected immediately. Memoised per request via `React.cache`.
- */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
   const token = (await cookies()).get(TOKEN_COOKIE)?.value;
   if (!token) return null;
@@ -29,8 +21,6 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   if (!user || user.status !== "active") return null;
   return user;
 });
-
-/* ── Route-handler guards (throw → JSON error via `handle`) ─────────────── */
 
 export async function requireApiUser(): Promise<User> {
   const user = await getCurrentUser();
@@ -44,8 +34,6 @@ export async function requireApiRole(...roles: Role[]): Promise<User> {
   return user;
 }
 
-/* ── Page guards (redirect) ────────────────────────────────────────────── */
-
 export async function requireUser(nextPath?: string): Promise<User> {
   const user = await getCurrentUser();
   if (!user) {
@@ -57,20 +45,27 @@ export async function requireUser(nextPath?: string): Promise<User> {
 export async function requireRole(roles: Role | Role[], nextPath?: string): Promise<User> {
   const allowed = Array.isArray(roles) ? roles : [roles];
   const user = await requireUser(nextPath);
-  if (!allowed.includes(user.role)) redirect("/dashboard");
+  if (!allowed.includes(user.role)) redirect(homePathFor(user.role));
   return user;
 }
 
-/* ── Cookie lifecycle ─────────────────────────────────────────────────── */
+export function homePathFor(role: Role): string {
+  return role === "manager" ? "/admin" : "/dashboard";
+}
+
+export async function redirectIfSignedIn(): Promise<void> {
+  const user = await getCurrentUser();
+  if (user) redirect(homePathFor(user.role));
+}
 
 export async function startSession(claims: AccessClaims): Promise<void> {
-  const token = await signAccessToken(claims);
+  const { token, maxAgeSeconds } = await signAccessToken(claims);
   (await cookies()).set(TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: env().COOKIE_SECURE,
     path: "/",
-    maxAge: MAX_AGE,
+    maxAge: maxAgeSeconds,
   });
 }
 

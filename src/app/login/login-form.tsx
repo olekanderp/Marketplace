@@ -5,16 +5,23 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, describeApiError } from "@/lib/api-client";
 
+const DEMO_PASSWORD = "Password123!";
+
 const DEMO = [
+  ["Buyer", "buyer@n5deal.test"],
+  ["Seller", "seller@n5deal.test"],
   ["Manager", "manager@n5deal.test"],
-  ["Seller", "alex.seller@n5deal.test"],
-  ["Buyer", "finn.buyer@n5deal.test"],
 ] as const;
+
+function safeNext(raw: string | null): string | null {
+  if (!raw) return null;
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
+}
 
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/dashboard";
+  const next = safeNext(params.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,11 +32,11 @@ export function LoginForm() {
     setBusy(true);
     setError(null);
     try {
-      await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      router.push(next);
+      const res = await apiFetch<{ user: { role: "buyer" | "seller" | "manager" } }>(
+        "/api/auth/login",
+        { method: "POST", body: JSON.stringify({ email, password }) },
+      );
+      router.push(next ?? (res.user.role === "manager" ? "/admin" : "/dashboard"));
       router.refresh();
     } catch (err) {
       setError(describeApiError(err));
@@ -80,7 +87,7 @@ export function LoginForm() {
       </p>
 
       <div className="rounded-xl border border-dashed border-line bg-canvas p-3 text-[12px] text-muted">
-        <p className="mb-1 font-medium text-ink">Demo accounts (password: Password123!)</p>
+        <p className="mb-1 font-medium text-ink">Demo accounts — one per role (password: {DEMO_PASSWORD})</p>
         <div className="flex flex-wrap gap-1.5">
           {DEMO.map(([label, addr]) => (
             <button
@@ -89,7 +96,7 @@ export function LoginForm() {
               className="pill !py-0.5 !text-[12px]"
               onClick={() => {
                 setEmail(addr);
-                setPassword("Password123!");
+                setPassword(DEMO_PASSWORD);
               }}
             >
               {label}

@@ -6,9 +6,18 @@ import type {
   SellerProfile,
   User,
 } from "@/lib/db";
+import type {
+  AssetStatus,
+  BusinessStatus,
+  Currency,
+  Sector,
+  UserStatus,
+} from "@/lib/domain";
 
-const iso = (d: Date | string | undefined | null): string =>
-  d ? new Date(d).toISOString() : new Date(0).toISOString();
+const iso = (value: Date | string | null | undefined): string | null =>
+  value ? new Date(value).toISOString() : null;
+
+const isoRequired = (value: Date | string): string => new Date(value).toISOString();
 
 export function serializeUserPublic(u: User) {
   return { id: u.id, name: u.name, role: u.role };
@@ -20,8 +29,8 @@ export function serializeUserSelf(u: User) {
     name: u.name,
     email: u.email,
     role: u.role,
-    status: u.status,
-    createdAt: iso(u.createdAt),
+    status: u.status as UserStatus,
+    createdAt: isoRequired(u.createdAt),
   };
 }
 
@@ -30,7 +39,7 @@ export function serializeUserAdmin(u: User) {
     ...serializeUserSelf(u),
     buyerProfile: u.buyerProfile ? serializeBuyerProfile(u.buyerProfile) : null,
     sellerProfile: u.sellerProfile ? serializeSellerProfile(u.sellerProfile) : null,
-    assetCount: Array.isArray(u.assets) ? u.assets.length : undefined,
+    assetCount: Array.isArray(u.assets) ? u.assets.length : null,
   };
 }
 
@@ -39,23 +48,23 @@ export function serializeAsset(a: Asset) {
     id: a.id,
     title: a.title,
     slug: a.slug,
-    description: a.description,
-    sector: a.sector,
-    licenseType: a.licenseType,
+    description: a.description as string,
+    sector: a.sector as Sector,
+    licenseType: a.licenseType as string,
     country: a.country,
-    businessStatus: a.businessStatus,
-    askingPrice: a.askingPrice, // number | null  (null === "on LOI")
-    currency: a.currency,
-    yearIssued: a.yearIssued,
+    businessStatus: a.businessStatus as BusinessStatus,
+    askingPrice: a.askingPrice as number | null,
+    currency: a.currency as Currency,
+    yearIssued: a.yearIssued as number | null,
     employees: a.employees ?? null,
     regulator: a.regulator ?? null,
-    highlights: a.highlights ?? [],
-    status: a.status,
-    views: a.views,
+    highlights: (a.highlights ?? []) as string[],
+    status: a.status as AssetStatus,
+    views: a.views as number,
     sellerId: a.sellerId,
-    seller: a.seller ? serializeUserPublic(a.seller) : undefined,
-    createdAt: iso(a.createdAt),
-    updatedAt: iso(a.updatedAt),
+    seller: a.seller ? serializeUserPublic(a.seller) : null,
+    createdAt: isoRequired(a.createdAt),
+    updatedAt: isoRequired(a.updatedAt),
   };
 }
 
@@ -68,13 +77,13 @@ export function serializeBuyerProfile(p: BuyerProfile) {
     headline: p.headline,
     bio: p.bio,
     mandate: p.mandate,
-    targetSectors: p.targetSectors ?? [],
-    targetJurisdictions: p.targetJurisdictions ?? [],
-    ticketMin: p.ticketMin,
-    ticketMax: p.ticketMax,
-    currency: p.currency,
-    user: p.user ? serializeUserPublic(p.user) : undefined,
-    updatedAt: iso(p.updatedAt),
+    targetSectors: (p.targetSectors ?? []) as Sector[],
+    targetJurisdictions: (p.targetJurisdictions ?? []) as string[],
+    ticketMin: p.ticketMin as number | null,
+    ticketMax: p.ticketMax as number | null,
+    currency: p.currency as Currency,
+    user: p.user ? serializeUserPublic(p.user) : null,
+    updatedAt: isoRequired(p.updatedAt),
   };
 }
 
@@ -87,10 +96,12 @@ export function serializeSellerProfile(p: SellerProfile) {
     companyName: p.companyName,
     about: p.about,
     website: p.website ?? null,
-    user: p.user ? serializeUserPublic(p.user) : undefined,
-    updatedAt: iso(p.updatedAt),
+    user: p.user ? serializeUserPublic(p.user) : null,
+    updatedAt: isoRequired(p.updatedAt),
   };
 }
+
+export type SellerProfileDTO = ReturnType<typeof serializeSellerProfile>;
 
 export function serializeMessage(m: Message) {
   return {
@@ -98,17 +109,20 @@ export function serializeMessage(m: Message) {
     conversationId: m.conversationId,
     senderId: m.senderId,
     body: m.body,
-    readAt: m.readAt ? iso(m.readAt) : null,
-    createdAt: iso(m.createdAt),
-    sender: m.sender ? serializeUserPublic(m.sender) : undefined,
+    readAt: iso(m.readAt),
+    createdAt: isoRequired(m.createdAt),
+    sender: m.sender ? serializeUserPublic(m.sender) : null,
   };
 }
 
 export function serializeConversation(c: Conversation, viewerId: string) {
-  const counterpart = c.buyerId === viewerId ? c.seller : c.buyer;
+  const viewerIsBuyer = c.buyerId === viewerId;
+  const counterpart = viewerIsBuyer ? c.seller : c.buyer;
   const messages = Array.isArray(c.messages)
     ? [...c.messages].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
     : [];
+  const last = messages.at(-1);
+
   return {
     id: c.id,
     subject: c.subject,
@@ -116,15 +130,20 @@ export function serializeConversation(c: Conversation, viewerId: string) {
     asset: c.asset ? { id: c.asset.id, title: c.asset.title, slug: c.asset.slug } : null,
     buyerId: c.buyerId,
     sellerId: c.sellerId,
-    role: c.buyerId === viewerId ? "buyer" : "seller",
+    viewerRole: viewerIsBuyer ? ("buyer" as const) : ("seller" as const),
     counterpart: counterpart
-      ? { id: counterpart.id, name: counterpart.name, email: counterpart.email, role: counterpart.role }
+      ? {
+          id: counterpart.id,
+          name: counterpart.name,
+          email: counterpart.email,
+          role: counterpart.role,
+          active: counterpart.status === "active",
+        }
       : null,
     messages: messages.map(serializeMessage),
-    lastMessageAt: messages.length ? iso(messages[messages.length - 1].createdAt) : iso(c.createdAt),
+    lastMessage: last ? last.body : null,
+    lastMessageAt: last ? isoRequired(last.createdAt) : isoRequired(c.createdAt),
     unread: messages.filter((m) => m.senderId !== viewerId && !m.readAt).length,
-    createdAt: iso(c.createdAt),
+    createdAt: isoRequired(c.createdAt),
   };
 }
-
-export type ConversationDTO = ReturnType<typeof serializeConversation>;

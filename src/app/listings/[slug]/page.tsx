@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { AdminAssetControls } from "@/components/admin-asset-controls";
 import { ContactForm } from "@/components/contact-form";
 import { MatchBadge, MatchReasons } from "@/components/match-badge";
 import { Sparkline } from "@/components/sparkline";
 import { StatusBadge, ValidatedBadge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth/session";
-import { SECTOR_LABELS } from "@/lib/domain";
+import { BUSINESS_STATUS_LABELS, SECTOR_LABELS } from "@/lib/domain";
 import { formatMoneyFull } from "@/lib/format";
-import { matchAsset } from "@/lib/match";
+import { matchAssetForMandate } from "@/lib/match";
 import {
+  assetIsPubliclyVisible,
   assetOwnedBy,
   getAssetRecordBySlug,
   getMandate,
@@ -24,33 +26,33 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
 
   const user = await getCurrentUser();
   const owner = user ? assetOwnedBy(record, user) : false;
+  const publiclyVisible = assetIsPubliclyVisible(record);
 
-  if (record.status !== "published" && !owner) notFound();
-  if (record.status === "published" && !owner) {
-    await incrementAssetViews(record.id);
+  if (!publiclyVisible && !owner) notFound();
+
+  if (publiclyVisible && !owner) {
+    after(() => incrementAssetViews(record.id));
   }
 
   const asset = serializeAsset(record);
   const mandate = user?.role === "buyer" ? await getMandate(user.id) : null;
-  const match = mandate
-    ? matchAsset(mandate, {
-        sector: record.sector,
-        country: record.country,
-        askingPrice: record.askingPrice,
-        businessStatus: record.businessStatus,
-        createdAt: record.createdAt,
-      })
-    : null;
+  const match = matchAssetForMandate(mandate, {
+    sector: record.sector,
+    country: record.country,
+    askingPrice: record.askingPrice,
+    businessStatus: record.businessStatus,
+    createdAt: record.createdAt,
+  });
 
-  const facts: [string, string][] = [
-    ["Country", asset.country],
-    ["Type of licence", asset.licenseType || "—"],
-    ["Sector", SECTOR_LABELS[asset.sector]],
-    ["Business status", asset.businessStatus.replace(/_/g, " ")],
-    ["Regulator", asset.regulator || "—"],
-    ["Year of issue", asset.yearIssued ? String(asset.yearIssued) : "—"],
-    ["Employees", asset.employees || "—"],
-    ["Asking price", formatMoneyFull(asset.askingPrice, asset.currency)],
+  const facts: { label: string; value: string }[] = [
+    { label: "Country", value: asset.country },
+    { label: "Type of licence", value: asset.licenseType || "—" },
+    { label: "Sector", value: SECTOR_LABELS[asset.sector] },
+    { label: "Business status", value: BUSINESS_STATUS_LABELS[asset.businessStatus] },
+    { label: "Regulator", value: asset.regulator || "—" },
+    { label: "Year of issue", value: asset.yearIssued ? String(asset.yearIssued) : "—" },
+    { label: "Employees", value: asset.employees || "—" },
+    { label: "Asking price", value: formatMoneyFull(asset.askingPrice, asset.currency) },
   ];
 
   return (
@@ -74,10 +76,10 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
           </div>
 
           <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {facts.map(([k, v]) => (
-              <div key={k} className="rounded-lg bg-canvas px-3 py-2">
-                <dt className="text-[11px] uppercase tracking-wide text-muted">{k}</dt>
-                <dd className="text-[13px] font-semibold capitalize">{v}</dd>
+            {facts.map((f) => (
+              <div key={f.label} className="rounded-lg bg-canvas px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-wide text-muted">{f.label}</dt>
+                <dd className="text-[13px] font-semibold">{f.value}</dd>
               </div>
             ))}
           </dl>
@@ -97,7 +99,9 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
 
           <div className="mt-4 flex items-center gap-4 border-t border-line pt-4">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-muted">Market trend (indicative)</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">
+                Market trend (indicative)
+              </p>
               <Sparkline seed={asset.slug} width={220} height={44} points={10} />
             </div>
             <span className="ml-auto text-[13px] text-muted">{asset.views} views</span>
@@ -108,7 +112,7 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
           <h2 className="text-[15px] font-semibold">Company overview</h2>
           {user ? (
             <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-muted">
-              {asset.description}
+              {asset.description || "The seller has not written an overview yet."}
             </p>
           ) : (
             <div className="mt-2">
@@ -116,7 +120,10 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
                 {asset.description}
               </p>
               <div className="mt-3 rounded-xl border border-dashed border-line bg-canvas p-4 text-[13px] text-muted">
-                <Link href={`/login?next=/listings/${asset.slug}`} className="font-medium text-brand-700">
+                <Link
+                  href={`/login?next=/listings/${asset.slug}`}
+                  className="font-medium text-brand-700"
+                >
                   Sign in
                 </Link>{" "}
                 to see the full overview and contact the seller.
@@ -136,7 +143,9 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
 
         {owner && (
           <div className="card space-y-2 p-4">
-            <p className="text-[13px] font-medium">This is your listing</p>
+            <p className="text-[13px] font-medium">
+              {user?.role === "manager" ? "Platform view" : "This is your listing"}
+            </p>
             <Link href={`/assets/${asset.id}/edit`} className="btn-primary btn-sm w-full">
               Edit listing
             </Link>
@@ -147,7 +156,7 @@ export default async function AssetDetailPage({ params }: PageProps<"/listings/[
           <AdminAssetControls assetId={asset.id} status={asset.status} />
         )}
 
-        {user?.role === "buyer" && asset.seller && (
+        {user?.role === "buyer" && asset.seller && publiclyVisible && (
           <ContactForm
             toUserId={asset.seller.id}
             assetId={asset.id}

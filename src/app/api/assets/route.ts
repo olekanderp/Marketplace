@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
       searchParamsToObject(request.nextUrl.searchParams, ["sector", "country", "businessStatus"]),
     );
 
-    // Attach Smart Match scores for signed-in buyers with a usable mandate.
     let mandate: Mandate | null = null;
     const user = await getCurrentUser();
     if (user?.role === "buyer") {

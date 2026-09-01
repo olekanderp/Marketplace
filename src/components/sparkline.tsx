@@ -1,5 +1,3 @@
-/** Deterministic "market trend" sparkline derived from a seed string. */
-
 function seededSeries(seed: string, points: number): number[] {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {

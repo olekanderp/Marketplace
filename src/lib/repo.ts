@@ -1,9 +1,15 @@
-import { Op, literal, type Order, type WhereOptions } from "sequelize";
+import { Op, literal, type Includeable, type Order, type WhereOptions } from "sequelize";
 import { db, type Asset } from "@/lib/db";
-import type { AssetStatus, Role, UserStatus } from "@/lib/domain";
+import {
+  isSellerAssetStatus,
+  type AssetStatus,
+  type Role,
+  type UserStatus,
+} from "@/lib/domain";
 import { badRequest, forbidden, notFound } from "@/lib/http";
 import {
   matchAsset,
+  matchAssetForMandate,
   mandateIsUsable,
   type Mandate,
   type MatchResult,
@@ -22,9 +28,8 @@ import type {
   AssetQuery,
   BuyerProfileInput,
   BuyerQuery,
+  SellerProfileInput,
 } from "@/lib/validation";
-
-/* ── slugs ────────────────────────────────────────────────────────────── */
 
 function slugify(input: string): string {
   const base = input
@@ -39,26 +44,26 @@ function slugify(input: string): string {
   return base || "asset";
 }
 
-const rand = (n: number) =>
-  Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+const randomSuffix = () => Math.random().toString(16).slice(2, 8);
 
 async function uniqueSlug(base: string): Promise<string> {
   const { Asset } = db();
   const root = slugify(base);
   for (let attempt = 0; attempt < 6; attempt++) {
-    const slug = attempt === 0 ? root : `${root}-${rand(6)}`;
+    const slug = attempt === 0 ? root : `${root}-${randomSuffix()}`;
     const clash = await Asset.findOne({ where: { slug }, attributes: ["id"] });
     if (!clash) return slug;
   }
   return `${root}-${Date.now().toString(36)}`;
 }
 
-const SELLER_INCLUDE = {
-  association: "seller" as const,
-  attributes: ["id", "name", "role"],
-};
+const SELLER_ATTRS = ["id", "name", "role", "status"] as const;
 
-/* ── assets: read ─────────────────────────────────────────────────────── */
+const sellerInclude = (onlyActive: boolean): Includeable => ({
+  association: "seller",
+  attributes: [...SELLER_ATTRS],
+  ...(onlyActive ? { where: { status: "active" }, required: true } : {}),
+});
 
 export interface AssetListResult {
   items: (AssetDTO & { match?: MatchResult })[];
@@ -70,7 +75,6 @@ export interface AssetListResult {
 
 interface ListAssetsOpts {
   scope?: "published" | "all";
-  sellerId?: string;
   mandate?: Mandate | null;
 }
 
@@ -79,15 +83,11 @@ export async function listAssets(
   opts: ListAssetsOpts = {},
 ): Promise<AssetListResult> {
   const { Asset } = db();
+  const publicScope = opts.scope !== "all";
   const and: WhereOptions[] = [];
   const where: WhereOptions & Record<symbol, unknown> = {};
 
-  if (opts.scope === "all") {
-    // manager view — no status filter
-  } else {
-    where.status = "published";
-  }
-  if (opts.sellerId) where.sellerId = opts.sellerId;
+  if (publicScope) where.status = "published";
   if (query.sector?.length) where.sector = { [Op.in]: query.sector };
   if (query.country?.length) where.country = { [Op.in]: query.country };
   if (query.businessStatus?.length) where.businessStatus = { [Op.in]: query.businessStatus };
@@ -128,28 +128,22 @@ export async function listAssets(
   const { rows, count } = await Asset.findAndCountAll({
     where,
     order,
-    include: [SELLER_INCLUDE],
+    include: [sellerInclude(publicScope)],
     limit: query.perPage,
     offset: (query.page - 1) * query.perPage,
     distinct: true,
   });
 
-  const useMatch = opts.mandate && mandateIsUsable(opts.mandate);
   const items = rows.map((a) => {
     const dto = serializeAsset(a);
-    if (useMatch) {
-      return {
-        ...dto,
-        match: matchAsset(opts.mandate as Mandate, {
-          sector: a.sector,
-          country: a.country,
-          askingPrice: a.askingPrice,
-          businessStatus: a.businessStatus,
-          createdAt: a.createdAt,
-        }),
-      };
-    }
-    return dto;
+    const match = matchAssetForMandate(opts.mandate ?? null, {
+      sector: a.sector,
+      country: a.country,
+      askingPrice: a.askingPrice,
+      businessStatus: a.businessStatus,
+      createdAt: a.createdAt,
+    });
+    return match ? { ...dto, match } : dto;
   });
 
   return {
@@ -161,14 +155,34 @@ export async function listAssets(
   };
 }
 
+export async function listAssetCountries(): Promise<string[]> {
+  const { Asset } = db();
+  const rows = await Asset.findAll({
+    attributes: ["country"],
+    where: { status: "published" },
+    group: ["country"],
+    order: [["country", "ASC"]],
+    raw: true,
+  });
+  return (rows as unknown as { country: string }[]).map((r) => r.country);
+}
+
 export async function getAssetRecordBySlug(slug: string) {
   const { Asset } = db();
-  return Asset.findOne({ where: { slug }, include: [SELLER_INCLUDE] });
+  return Asset.findOne({ where: { slug }, include: [sellerInclude(false)] });
 }
 
 export async function getAssetRecordById(id: string) {
   const { Asset } = db();
-  return Asset.findByPk(id, { include: [SELLER_INCLUDE] });
+  return Asset.findByPk(id, { include: [sellerInclude(false)] });
+}
+
+export function assetIsPubliclyVisible(asset: Asset): boolean {
+  return asset.status === "published" && asset.seller?.status === "active";
+}
+
+export function assetOwnedBy(asset: Asset, actor: { id: string; role: Role }): boolean {
+  return actor.role === "manager" || asset.sellerId === actor.id;
 }
 
 export async function incrementAssetViews(id: string): Promise<void> {
@@ -181,19 +195,16 @@ export async function listSellerAssets(sellerId: string): Promise<AssetDTO[]> {
   const rows = await Asset.findAll({
     where: { sellerId },
     order: [["createdAt", "DESC"]],
-    include: [SELLER_INCLUDE],
+    include: [sellerInclude(false)],
   });
   return rows.map(serializeAsset);
 }
 
-/* ── assets: write ───────────────────────────────────────────────────── */
-
 export async function createAsset(sellerId: string, input: AssetInput): Promise<AssetDTO> {
   const { Asset } = db();
-  const slug = await uniqueSlug(`${input.title}`);
   const asset = await Asset.create({
     sellerId,
-    slug,
+    slug: await uniqueSlug(input.title),
     title: input.title,
     description: input.description,
     sector: input.sector,
@@ -208,6 +219,7 @@ export async function createAsset(sellerId: string, input: AssetInput): Promise<
     highlights: input.highlights,
     status: input.status,
   });
+  await asset.reload({ include: [sellerInclude(false)] });
   return serializeAsset(asset);
 }
 
@@ -217,13 +229,27 @@ export async function updateAsset(
   input: Partial<AssetInput>,
 ): Promise<AssetDTO> {
   const { Asset } = db();
-  const asset = await Asset.findByPk(id, { include: [SELLER_INCLUDE] });
+  const asset = await Asset.findByPk(id, { include: [sellerInclude(false)] });
   if (!asset) throw notFound("Asset not found");
   if (actor.role !== "manager" && asset.sellerId !== actor.id) {
     throw forbidden("You can only edit your own listings");
   }
-  await asset.update(pruneUndefined(input));
-  await asset.reload({ include: [SELLER_INCLUDE] });
+
+  const patch = pruneUndefined(input);
+
+  if (actor.role !== "manager" && patch.status !== undefined) {
+    if (asset.status === "suspended") {
+      throw forbidden(
+        "This listing was suspended by the platform. Contact the platform team to restore it.",
+      );
+    }
+    if (!isSellerAssetStatus(patch.status)) {
+      throw forbidden("Only the platform team can set that status");
+    }
+  }
+
+  await asset.update(patch);
+  await asset.reload({ include: [sellerInclude(false)] });
   return serializeAsset(asset);
 }
 
@@ -234,6 +260,9 @@ export async function deleteAsset(id: string, actor: { id: string; role: Role })
   if (actor.role !== "manager" && asset.sellerId !== actor.id) {
     throw forbidden("You can only delete your own listings");
   }
+  if (actor.role !== "manager" && asset.status === "suspended") {
+    throw forbidden("Suspended listings can only be removed by the platform team");
+  }
   await asset.destroy();
 }
 
@@ -243,7 +272,10 @@ function pruneUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
   ) as Partial<T>;
 }
 
-/* ── profiles ─────────────────────────────────────────────────────────── */
+const PROFILE_USER_INCLUDE: Includeable = {
+  association: "user",
+  attributes: ["id", "name", "role", "status"],
+};
 
 export async function getMandate(userId: string): Promise<Mandate | null> {
   const { BuyerProfile } = db();
@@ -259,43 +291,56 @@ export async function getMandate(userId: string): Promise<Mandate | null> {
 
 export async function getBuyerProfile(userId: string) {
   const { BuyerProfile } = db();
-  const p = await BuyerProfile.findOne({ where: { userId }, include: [{ association: "user", attributes: ["id", "name", "role"] }] });
+  const p = await BuyerProfile.findOne({
+    where: { userId },
+    include: [PROFILE_USER_INCLUDE],
+  });
   return p ? serializeBuyerProfile(p) : null;
 }
 
 export async function upsertBuyerProfile(userId: string, input: BuyerProfileInput) {
   const { BuyerProfile } = db();
-  const [p] = await BuyerProfile.findOrCreate({ where: { userId }, defaults: { userId, ...input } });
+  const [p] = await BuyerProfile.findOrCreate({
+    where: { userId },
+    defaults: { userId, ...input },
+  });
   await p.update(input);
-  await p.reload({ include: [{ association: "user", attributes: ["id", "name", "role"] }] });
+  await p.reload({ include: [PROFILE_USER_INCLUDE] });
   return serializeBuyerProfile(p);
 }
 
 export async function getSellerProfile(userId: string) {
   const { SellerProfile } = db();
-  const p = await SellerProfile.findOne({ where: { userId }, include: [{ association: "user", attributes: ["id", "name", "role"] }] });
+  const p = await SellerProfile.findOne({
+    where: { userId },
+    include: [PROFILE_USER_INCLUDE],
+  });
   return p ? serializeSellerProfile(p) : null;
 }
 
-export async function upsertSellerProfile(
-  userId: string,
-  input: { companyName: string; about: string; website: string },
-) {
+export async function upsertSellerProfile(userId: string, input: SellerProfileInput) {
   const { SellerProfile } = db();
-  const [p] = await SellerProfile.findOrCreate({ where: { userId }, defaults: { userId, ...input } });
+  const [p] = await SellerProfile.findOrCreate({
+    where: { userId },
+    defaults: { userId, ...input },
+  });
   await p.update(input);
-  await p.reload({ include: [{ association: "user", attributes: ["id", "name", "role"] }] });
+  await p.reload({ include: [PROFILE_USER_INCLUDE] });
   return serializeSellerProfile(p);
 }
 
-/* ── buyers directory (for sellers) ──────────────────────────────────── */
+const ACTIVE_USER_INCLUDE: Includeable = {
+  association: "user",
+  attributes: ["id", "name", "role", "status"],
+  where: { status: "active" },
+  required: true,
+};
 
 export async function listBuyers(query: BuyerQuery) {
   const { BuyerProfile } = db();
   const where: WhereOptions & Record<symbol, unknown> = {};
   const and: WhereOptions[] = [];
 
-  // Numeric ticket overlap is safe to push down to SQL.
   if (query.ticket != null) {
     and.push({
       [Op.and]: [
@@ -310,18 +355,9 @@ export async function listBuyers(query: BuyerQuery) {
   }
   if (and.length) where[Op.and] = and;
 
-  // Fetch the (small) candidate set, then filter JSONB facets in JS — avoids
-  // hand-written SQL and keeps the query injection-safe.
   const rows = await BuyerProfile.findAll({
     where,
-    include: [
-      {
-        association: "user",
-        attributes: ["id", "name", "role", "status"],
-        where: { status: "active" },
-        required: true,
-      },
-    ],
+    include: [ACTIVE_USER_INCLUDE],
     order: [["updatedAt", "DESC"]],
   });
 
@@ -332,8 +368,9 @@ export async function listBuyers(query: BuyerQuery) {
     }
     if (query.jurisdiction) {
       const needle = query.jurisdiction.toLowerCase();
-      const hit = (p.targetJurisdictions ?? []).some((j) => j.toLowerCase().includes(needle));
-      if (!hit) return false;
+      if (!(p.targetJurisdictions ?? []).some((j) => j.toLowerCase().includes(needle))) {
+        return false;
+      }
     }
     return true;
   });
@@ -353,18 +390,19 @@ export async function getBuyer(userId: string) {
   const { BuyerProfile } = db();
   const p = await BuyerProfile.findOne({
     where: { userId },
-    include: [{ association: "user", attributes: ["id", "name", "role", "status"], where: { status: "active" }, required: true }],
+    include: [ACTIVE_USER_INCLUDE],
   });
   return p ? serializeBuyerProfile(p) : null;
 }
 
-/* ── conversations / messages ────────────────────────────────────────── */
-
-const CONVO_INCLUDE = [
-  { association: "buyer", attributes: ["id", "name", "email", "role"] },
-  { association: "seller", attributes: ["id", "name", "email", "role"] },
-  { association: "asset", attributes: ["id", "title", "slug"] },
-  { association: "messages", include: [{ association: "sender", attributes: ["id", "name", "role"] }] },
+const CONVO_INCLUDE: Includeable[] = [
+  { association: "buyer", attributes: ["id", "name", "email", "role", "status"] },
+  { association: "seller", attributes: ["id", "name", "email", "role", "status"] },
+  { association: "asset", attributes: ["id", "title", "slug", "status"] },
+  {
+    association: "messages",
+    include: [{ association: "sender", attributes: ["id", "name", "role"] }],
+  },
 ];
 
 export async function listConversationsFor(userId: string) {
@@ -372,7 +410,6 @@ export async function listConversationsFor(userId: string) {
   const rows = await Conversation.findAll({
     where: { [Op.or]: [{ buyerId: userId }, { sellerId: userId }] },
     include: CONVO_INCLUDE,
-    order: [["updatedAt", "DESC"]],
   });
   return rows
     .map((c) => serializeConversation(c, userId))
@@ -402,13 +439,14 @@ export async function startConversation(params: {
   const other = await User.findByPk(toUserId);
   if (!other || other.status !== "active") throw notFound("Recipient not found");
 
-  // Decide buyer/seller sides.
   let buyerId: string;
   let sellerId: string;
   if (actor.role === "buyer") {
+    if (other.role !== "seller") throw badRequest("Buyers can only contact sellers");
     buyerId = actor.id;
     sellerId = toUserId;
   } else if (actor.role === "seller") {
+    if (other.role !== "buyer") throw badRequest("Sellers can only contact buyers");
     sellerId = actor.id;
     buyerId = toUserId;
   } else {
@@ -421,7 +459,9 @@ export async function startConversation(params: {
     const asset = await Asset.findByPk(params.assetId);
     if (!asset) throw notFound("Asset not found");
     if (asset.sellerId !== sellerId) throw badRequest("Asset does not belong to that seller");
-    if (actor.role === "seller" && asset.sellerId !== actor.id) throw forbidden();
+    if (asset.status !== "published" && asset.sellerId !== actor.id) {
+      throw notFound("Asset not found");
+    }
     assetId = asset.id;
     if (!subject) subject = `Re: ${asset.title}`;
   }
@@ -431,11 +471,24 @@ export async function startConversation(params: {
     where: { assetId, buyerId, sellerId },
     defaults: { assetId, buyerId, sellerId, subject },
   });
-  await Message.create({ conversationId: conversation.id, senderId: actor.id, body: params.message });
-  await conversation.update({ updatedAt: new Date() });
+  await Message.create({
+    conversationId: conversation.id,
+    senderId: actor.id,
+    body: params.message,
+  });
+  await touch(conversation.id);
 
   const full = await Conversation.findByPk(conversation.id, { include: CONVO_INCLUDE });
-  return { conversation: serializeConversation(full!, actor.id), created };
+  if (!full) throw notFound("Conversation not found");
+  return { conversation: serializeConversation(full, actor.id), created };
+}
+
+async function touch(conversationId: string): Promise<void> {
+  const { Conversation } = db();
+  await Conversation.update(
+    { updatedAt: new Date() },
+    { where: { id: conversationId }, silent: true },
+  );
 }
 
 export async function postMessage(conversationId: string, senderId: string, body: string) {
@@ -443,18 +496,21 @@ export async function postMessage(conversationId: string, senderId: string, body
   const c = await Conversation.findByPk(conversationId);
   if (!c) throw notFound("Conversation not found");
   if (c.buyerId !== senderId && c.sellerId !== senderId) throw forbidden();
+
   const message = await Message.create({ conversationId, senderId, body });
-  await c.update({ updatedAt: new Date() });
+  await touch(conversationId);
+
   const withSender = await Message.findByPk(message.id, {
     include: [{ association: "sender", attributes: ["id", "name", "role"] }],
   });
-  return serializeMessage(withSender!);
+  if (!withSender) throw notFound("Message not found");
+  return serializeMessage(withSender);
 }
 
-export async function markConversationRead(conversationId: string, userId: string) {
+export async function markConversationRead(conversationId: string, userId: string): Promise<void> {
   const { Conversation, Message } = db();
   const c = await Conversation.findByPk(conversationId);
-  if (!c) throw notFound();
+  if (!c) throw notFound("Conversation not found");
   if (c.buyerId !== userId && c.sellerId !== userId) throw forbidden();
   await Message.update(
     { readAt: new Date() },
@@ -462,24 +518,21 @@ export async function markConversationRead(conversationId: string, userId: strin
   );
 }
 
-/* ── recommendations ─────────────────────────────────────────────────── */
-
 export async function recommendAssetsForBuyer(userId: string, limit = 6) {
-  const { BuyerProfile, Asset } = db();
-  const profile = await BuyerProfile.findOne({ where: { userId } });
-  const mandate: Mandate = {
-    targetSectors: profile?.targetSectors ?? [],
-    targetJurisdictions: profile?.targetJurisdictions ?? [],
-    ticketMin: profile?.ticketMin ?? null,
-    ticketMax: profile?.ticketMax ?? null,
-  };
+  const mandate = await getMandate(userId);
+  if (!mandate || !mandateIsUsable(mandate)) {
+    return { mandateUsable: false, items: [] };
+  }
+
+  const { Asset } = db();
   const rows = await Asset.findAll({
     where: { status: "published" },
-    include: [SELLER_INCLUDE],
+    include: [sellerInclude(true)],
     order: [["createdAt", "DESC"]],
-    limit: 60,
+    limit: 100,
   });
-  const scored = rows
+
+  const items = rows
     .map((a) => ({
       asset: serializeAsset(a),
       match: matchAsset(mandate, {
@@ -492,7 +545,8 @@ export async function recommendAssetsForBuyer(userId: string, limit = 6) {
     }))
     .sort((x, y) => y.match.score - x.match.score)
     .slice(0, limit);
-  return { mandateUsable: mandateIsUsable(mandate), items: scored };
+
+  return { mandateUsable: true, items };
 }
 
 export async function matchingBuyersForAsset(
@@ -506,36 +560,32 @@ export async function matchingBuyersForAsset(
   if (actor.role !== "manager" && asset.sellerId !== actor.id) throw forbidden();
 
   const profiles = await BuyerProfile.findAll({
-    include: [{ association: "user", attributes: ["id", "name", "role", "status"], where: { status: "active" }, required: true }],
-    limit: 200,
+    include: [ACTIVE_USER_INCLUDE],
+    limit: 500,
   });
 
-  const scored = profiles
-    .map((p) => {
+  const items = profiles
+    .flatMap((p) => {
       const mandate: Mandate = {
         targetSectors: p.targetSectors ?? [],
         targetJurisdictions: p.targetJurisdictions ?? [],
         ticketMin: p.ticketMin ?? null,
         ticketMax: p.ticketMax ?? null,
       };
-      return {
-        buyer: serializeBuyerProfile(p),
-        match: matchAsset(mandate, {
-          sector: asset.sector,
-          country: asset.country,
-          askingPrice: asset.askingPrice,
-          businessStatus: asset.businessStatus,
-          createdAt: asset.createdAt,
-        }),
-      };
+      const match = matchAssetForMandate(mandate, {
+        sector: asset.sector,
+        country: asset.country,
+        askingPrice: asset.askingPrice,
+        businessStatus: asset.businessStatus,
+        createdAt: asset.createdAt,
+      });
+      return match ? [{ buyer: serializeBuyerProfile(p), match }] : [];
     })
     .sort((a, b) => b.match.score - a.match.score)
     .slice(0, limit);
 
-  return { asset: serializeAsset(asset), items: scored };
+  return { asset: serializeAsset(asset), items };
 }
-
-/* ── admin ───────────────────────────────────────────────────────────── */
 
 export async function adminListUsers(params: {
   role?: Role;
@@ -545,13 +595,14 @@ export async function adminListUsers(params: {
   perPage: number;
 }) {
   const { User } = db();
-  const where: WhereOptions = {};
-  if (params.role) Object.assign(where, { role: params.role });
-  if (params.status) Object.assign(where, { status: params.status });
+  const where: WhereOptions & Record<symbol, unknown> = {};
+  if (params.role) where.role = params.role;
+  if (params.status) where.status = params.status;
   if (params.q) {
     const like = { [Op.iLike]: `%${params.q}%` };
-    Object.assign(where, { [Op.or]: [{ name: like }, { email: like }] });
+    where[Op.and] = [{ [Op.or]: [{ name: like }, { email: like }] }];
   }
+
   const { rows, count } = await User.findAndCountAll({
     where,
     include: [
@@ -564,6 +615,7 @@ export async function adminListUsers(params: {
     offset: (params.page - 1) * params.perPage,
     distinct: true,
   });
+
   return {
     items: rows.map(serializeUserAdmin),
     total: count,
@@ -575,29 +627,24 @@ export async function adminListUsers(params: {
 
 export async function adminSetUserStatus(id: string, status: UserStatus) {
   const { User } = db();
-  const user = await User.findByPk(id);
+  const user = await User.findByPk(id, {
+    include: [
+      { association: "buyerProfile", required: false },
+      { association: "sellerProfile", required: false },
+      { association: "assets", required: false, attributes: ["id"] },
+    ],
+  });
   if (!user) throw notFound("User not found");
   if (user.role === "manager") throw forbidden("Manager accounts cannot be changed here");
   await user.update({ status });
-  // Removing/suspending a seller also hides their live listings.
-  if (status !== "active") {
-    const { Asset } = db();
-    await Asset.update(
-      { status: "suspended" },
-      { where: { sellerId: id, status: "published" } },
-    );
-  }
   return serializeUserAdmin(user);
 }
 
 export async function adminSetAssetStatus(id: string, status: AssetStatus) {
   const { Asset } = db();
-  const asset = await Asset.findByPk(id, { include: [SELLER_INCLUDE] });
+  const asset = await Asset.findByPk(id, { include: [sellerInclude(false)] });
   if (!asset) throw notFound("Asset not found");
   await asset.update({ status });
+  await asset.reload({ include: [sellerInclude(false)] });
   return serializeAsset(asset);
-}
-
-export function assetOwnedBy(asset: Asset, actor: { id: string; role: Role }): boolean {
-  return actor.role === "manager" || asset.sellerId === actor.id;
 }

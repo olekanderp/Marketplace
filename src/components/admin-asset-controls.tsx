@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiFetch, describeApiError } from "@/lib/api-client";
-import { ASSET_STATUSES, type AssetStatus } from "@/lib/domain";
+import { ASSET_STATUS_LABELS, ASSET_STATUSES, type AssetStatus } from "@/lib/domain";
 
 export function AdminAssetControls({
   assetId,
@@ -34,7 +34,7 @@ export function AdminAssetControls({
 
   return (
     <div className="card space-y-2 border-warn-600/30 bg-warn-50 p-3">
-      <p className="text-[13px] font-medium text-warn-600">Moderation · current: {status}</p>
+      <p className="text-[13px] font-medium text-warn-600">Moderation · current: {ASSET_STATUS_LABELS[status]}</p>
       <div className="flex flex-wrap gap-2">
         {ASSET_STATUSES.filter((s) => s !== status).map((s) => (
           <button
@@ -43,7 +43,7 @@ export function AdminAssetControls({
             disabled={busy !== null}
             onClick={() => set(s)}
           >
-            {busy === s ? "…" : `Set ${s}`}
+            {busy === s ? "…" : ASSET_STATUS_LABELS[s]}
           </button>
         ))}
       </div>

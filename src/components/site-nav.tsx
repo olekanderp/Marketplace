@@ -16,6 +16,7 @@ const NAV_BY_ROLE: Record<string, { href: string; label: string }[]> = {
     { href: "/dashboard", label: "My listings" },
     { href: "/buyers", label: "Browse buyers" },
     { href: "/inbox", label: "Inbox" },
+    { href: "/profile", label: "My profile" },
   ],
   manager: [
     { href: "/listings", label: "All listings" },

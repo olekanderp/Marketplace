@@ -81,7 +81,6 @@ export default async function DashboardPage() {
     );
   }
 
-  // Buyer
   const recs = await recommendAssetsForBuyer(user.id, 4);
   return (
     <div className="space-y-8">
@@ -138,8 +137,7 @@ function InboxPreview({
             <div className="min-w-0">
               <p className="truncate text-[14px] font-medium">{c.subject}</p>
               <p className="truncate text-[13px] text-muted">
-                {c.counterpart?.name} ·{" "}
-                {c.messages.at(-1)?.body ?? "No messages"}
+                {c.counterpart?.name} · {c.lastMessage ?? "No messages"}
               </p>
             </div>
             {c.unread > 0 && (

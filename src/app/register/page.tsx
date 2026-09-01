@@ -1,8 +1,10 @@
+import { redirectIfSignedIn } from "@/lib/auth/session";
 import { RegisterForm } from "./register-form";
 
 export const metadata = { title: "Create an account — N5Deal" };
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  await redirectIfSignedIn();
   return (
     <div className="mx-auto max-w-sm py-10">
       <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>

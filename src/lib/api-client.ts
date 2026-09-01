@@ -34,7 +34,6 @@ export async function apiFetch<T = unknown>(
   return data as T;
 }
 
-/** Flatten a Zod `flatten()` payload into a readable string. */
 export function describeApiError(err: unknown): string {
   if (!(err instanceof ApiClientError)) {
     return err instanceof Error ? err.message : "Something went wrong";

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { MessageComposer } from "@/components/message-composer";
 import { requireUser } from "@/lib/auth/session";
 import { ApiError } from "@/lib/http";
@@ -12,12 +13,13 @@ export default async function ConversationPage({ params }: PageProps<"/inbox/[id
 
   let conversation;
   try {
-    await markConversationRead(id, user.id);
     conversation = await getConversationFor(id, user.id);
   } catch (err) {
     if (err instanceof ApiError && (err.status === 404 || err.status === 403)) notFound();
     throw err;
   }
+
+  after(() => markConversationRead(id, user.id));
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">

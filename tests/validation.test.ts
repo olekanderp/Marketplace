@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   assetCreateSchema,
   assetQuerySchema,
+  assetUpdateSchema,
+  buyerProfileSchema,
   registerSchema,
   startConversationSchema,
 } from "@/lib/validation";
@@ -42,9 +44,22 @@ describe("assetCreateSchema", () => {
       status: "draft",
       currency: "USD",
       askingPrice: null,
+      yearIssued: null,
       highlights: [],
       businessStatus: "active",
     });
+  });
+
+  it("treats an empty price as 'on LOI', not zero", () => {
+    const parsed = assetCreateSchema.parse({
+      title: "No price yet",
+      sector: "emi",
+      country: "Malta",
+      askingPrice: "",
+      yearIssued: "",
+    });
+    expect(parsed.askingPrice).toBeNull();
+    expect(parsed.yearIssued).toBeNull();
   });
 
   it("rejects an unknown sector", () => {
@@ -60,7 +75,31 @@ describe("assetCreateSchema", () => {
       country: "Poland",
       askingPrice: "250000",
     });
-    expect(parsed.askingPrice).toBe(250000);
+    expect(parsed.askingPrice).toBe(250_000);
+  });
+
+  it("does not let a seller set a platform-only status", () => {
+    expect(() =>
+      assetCreateSchema.parse({
+        title: "Sneaky listing",
+        sector: "emi",
+        country: "Malta",
+        status: "suspended",
+      }),
+    ).toThrow();
+    expect(() => assetUpdateSchema.parse({ status: "suspended" })).toThrow();
+    expect(assetUpdateSchema.parse({ status: "archived" }).status).toBe("archived");
+  });
+});
+
+describe("buyerProfileSchema", () => {
+  it("rejects a ticket range where the minimum exceeds the maximum", () => {
+    expect(() => buyerProfileSchema.parse({ ticketMin: 5_000_000, ticketMax: 1_000_000 })).toThrow();
+  });
+
+  it("accepts open-ended ticket ranges", () => {
+    expect(buyerProfileSchema.parse({ ticketMin: 1_000_000 }).ticketMax).toBeNull();
+    expect(buyerProfileSchema.parse({ ticketMax: 1_000_000 }).ticketMin).toBeNull();
   });
 });
 
@@ -71,8 +110,25 @@ describe("assetQuerySchema", () => {
   });
 
   it("keeps repeated sector values as an array", () => {
-    const parsed = assetQuerySchema.parse({ sector: ["emi", "payment"] });
-    expect(parsed.sector).toEqual(["emi", "payment"]);
+    expect(assetQuerySchema.parse({ sector: ["emi", "payment"] }).sector).toEqual([
+      "emi",
+      "payment",
+    ]);
+  });
+
+  it("ignores an empty price bound instead of filtering on zero", () => {
+    const parsed = assetQuerySchema.parse({ priceMin: "", priceMax: "" });
+    expect(parsed.priceMin).toBeUndefined();
+    expect(parsed.priceMax).toBeUndefined();
+  });
+
+  it("parses includeOnRequest as a real boolean", () => {
+    expect(assetQuerySchema.parse({ includeOnRequest: "false" }).includeOnRequest).toBe(false);
+    expect(assetQuerySchema.parse({ includeOnRequest: "true" }).includeOnRequest).toBe(true);
+  });
+
+  it("caps perPage", () => {
+    expect(() => assetQuerySchema.parse({ perPage: "500" })).toThrow();
   });
 });
 

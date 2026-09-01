@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AssetForm } from "@/components/asset-form";
 import { requireUser } from "@/lib/auth/session";
+import { isSellerAssetStatus } from "@/lib/domain";
 import { assetOwnedBy, getAssetRecordById } from "@/lib/repo";
 import { serializeAsset } from "@/lib/serialize";
 
@@ -13,6 +14,7 @@ export default async function EditAssetPage({ params }: PageProps<"/assets/[id]/
   if (!assetOwnedBy(record, user)) redirect("/dashboard");
 
   const asset = serializeAsset(record);
+  const locked = asset.status === "suspended" && user.role !== "manager";
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -23,6 +25,7 @@ export default async function EditAssetPage({ params }: PageProps<"/assets/[id]/
       <AssetForm
         mode="edit"
         assetId={asset.id}
+        locked={locked}
         initial={{
           title: asset.title,
           description: asset.description,
@@ -36,7 +39,7 @@ export default async function EditAssetPage({ params }: PageProps<"/assets/[id]/
           employees: asset.employees,
           regulator: asset.regulator,
           highlights: asset.highlights,
-          status: asset.status === "published" ? "published" : "draft",
+          status: isSellerAssetStatus(asset.status) ? asset.status : "draft",
         }}
       />
     </div>

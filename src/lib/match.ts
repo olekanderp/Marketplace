@@ -1,11 +1,3 @@
-/**
- * Lightweight, deterministic recommender ("Smart Match").
- *
- * Given a buyer's mandate and an asset, produce a 0–100 compatibility score
- * with human-readable reasons. No external LLM — the scoring is transparent and
- * unit-tested, which matters more than raw sophistication for a marketplace
- * where users need to trust the ranking.
- */
 import type { BusinessStatus, Sector } from "@/lib/domain";
 import { SECTOR_LABELS } from "@/lib/domain";
 
@@ -27,11 +19,21 @@ export interface MatchableAsset {
 export interface MatchResult {
   score: number;
   reasons: string[];
+  caveats: string[];
 }
 
 const WEIGHTS = { sector: 0.4, jurisdiction: 0.25, ticket: 0.25, freshness: 0.1 };
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+export function mandateIsUsable(m: Mandate): boolean {
+  return (
+    m.targetSectors.length > 0 ||
+    m.targetJurisdictions.length > 0 ||
+    m.ticketMin !== null ||
+    m.ticketMax !== null
+  );
+}
 
 function sectorScore(m: Mandate, a: MatchableAsset, reasons: string[]): number {
   if (m.targetSectors.length === 0) return 0.5;
@@ -45,7 +47,7 @@ function sectorScore(m: Mandate, a: MatchableAsset, reasons: string[]): number {
 function jurisdictionScore(m: Mandate, a: MatchableAsset, reasons: string[]): number {
   if (m.targetJurisdictions.length === 0) return 0.5;
   const hit = m.targetJurisdictions.some(
-    (j) => j.toLowerCase() === a.country.toLowerCase(),
+    (j) => j.trim().toLowerCase() === a.country.trim().toLowerCase(),
   );
   if (hit) {
     reasons.push(`Located in a target jurisdiction (${a.country})`);
@@ -55,17 +57,19 @@ function jurisdictionScore(m: Mandate, a: MatchableAsset, reasons: string[]): nu
 }
 
 function ticketScore(m: Mandate, a: MatchableAsset, reasons: string[]): number {
-  if (a.askingPrice === null) return 0.4; // "on LOI" — unknown, not disqualifying
+  if (m.ticketMin === null && m.ticketMax === null) return 0.5;
+  if (a.askingPrice === null) return 0.4;
+
   const min = m.ticketMin ?? 0;
   const max = m.ticketMax ?? Number.POSITIVE_INFINITY;
-  if (m.ticketMin === null && m.ticketMax === null) return 0.5;
 
   if (a.askingPrice >= min && a.askingPrice <= max) {
     reasons.push("Asking price is within your ticket range");
     return 1;
   }
-  // Partial credit if within 30% of the nearest bound.
+
   const nearest = a.askingPrice < min ? min : max;
+  if (!Number.isFinite(nearest)) return 0.1;
   const drift = Math.abs(a.askingPrice - nearest) / Math.max(nearest, 1);
   return drift <= 0.3 ? 0.6 : 0.1;
 }
@@ -79,6 +83,8 @@ function freshnessScore(a: MatchableAsset): number {
 
 export function matchAsset(mandate: Mandate, asset: MatchableAsset): MatchResult {
   const reasons: string[] = [];
+  const caveats: string[] = [];
+
   const raw =
     WEIGHTS.sector * sectorScore(mandate, asset, reasons) +
     WEIGHTS.jurisdiction * jurisdictionScore(mandate, asset, reasons) +
@@ -86,23 +92,22 @@ export function matchAsset(mandate: Mandate, asset: MatchableAsset): MatchResult
     WEIGHTS.freshness * freshnessScore(asset);
 
   if (asset.businessStatus !== "active") {
-    reasons.push("Note: business is not currently active");
+    caveats.push("Business is not currently active");
+  }
+  if (asset.askingPrice === null && (mandate.ticketMin !== null || mandate.ticketMax !== null)) {
+    caveats.push("Asking price is on LOI, so ticket fit is unverified");
   }
 
-  return { score: Math.round(clamp01(raw) * 100), reasons };
+  return { score: Math.round(clamp01(raw) * 100), reasons, caveats };
 }
 
-/** Is a mandate specific enough to bother ranking by it? */
-export function mandateIsUsable(m: Mandate): boolean {
-  return (
-    m.targetSectors.length > 0 ||
-    m.targetJurisdictions.length > 0 ||
-    m.ticketMin !== null ||
-    m.ticketMax !== null
-  );
+export function matchAssetForMandate(
+  mandate: Mandate | null,
+  asset: MatchableAsset,
+): MatchResult | null {
+  if (!mandate || !mandateIsUsable(mandate)) return null;
+  return matchAsset(mandate, asset);
 }
-
-/* ── Smart validation (used on publish) ───────────────────────────────── */
 
 export interface AssetDraft {
   description: string;
@@ -114,9 +119,10 @@ export interface AssetDraft {
   licenseType: string;
 }
 
+const REGULATED_SECTORS: readonly Sector[] = ["bank", "payment", "emi"];
+
 export function smartValidateAsset(d: AssetDraft): string[] {
   const warnings: string[] = [];
-  const regulated: Sector[] = ["bank", "payment", "emi"];
 
   if (d.description.trim().length < 120) {
     warnings.push(
@@ -129,10 +135,12 @@ export function smartValidateAsset(d: AssetDraft): string[] {
   if (d.askingPrice === null) {
     warnings.push("No asking price — the listing will show “on LOI”. Consider a guide price.");
   }
-  if (regulated.includes(d.sector) && !d.regulator?.trim()) {
-    warnings.push(`Sector is “${d.sector}” but no regulator is named — buyers expect this.`);
+  if (REGULATED_SECTORS.includes(d.sector) && !d.regulator?.trim()) {
+    warnings.push(
+      `Sector is “${SECTOR_LABELS[d.sector]}” but no regulator is named — buyers expect this.`,
+    );
   }
-  if (regulated.includes(d.sector) && !d.licenseType.trim()) {
+  if (REGULATED_SECTORS.includes(d.sector) && !d.licenseType.trim()) {
     warnings.push("No licence type specified for a regulated asset.");
   }
   if (d.yearIssued === null) {

@@ -1,11 +1,3 @@
-/**
- * Runtime environment access.
- *
- * Resolved lazily and memoised so that `next build` (which evaluates route
- * modules without a database or secrets available) never throws — the checks
- * run on the first real request instead.
- */
-
 export interface Env {
   DATABASE_URL: string;
   JWT_SECRET: string;
@@ -20,8 +12,7 @@ function required(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === "") {
     throw new Error(
-      `Missing required environment variable "${name}". ` +
-        `Copy .env.example to .env and fill it in.`,
+      `Missing required environment variable "${name}". Copy .env.example to .env and fill it in.`,
     );
   }
   return value;
@@ -35,8 +26,7 @@ export function env(): Env {
 
   if (nodeEnv === "production" && secret.startsWith("dev-only")) {
     throw new Error(
-      "Refusing to start in production with the example JWT_SECRET. " +
-        "Generate one with `openssl rand -base64 48`.",
+      "Refusing to start in production with the example JWT_SECRET. Generate one with `openssl rand -base64 48`.",
     );
   }
 
@@ -44,7 +34,6 @@ export function env(): Env {
     DATABASE_URL: required("DATABASE_URL"),
     JWT_SECRET: secret,
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",
-    // Explicit COOKIE_SECURE wins; otherwise default to secure only in production.
     COOKIE_SECURE:
       process.env.COOKIE_SECURE !== undefined
         ? process.env.COOKIE_SECURE === "true"

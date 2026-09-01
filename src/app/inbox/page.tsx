@@ -33,11 +33,11 @@ export default async function InboxPage() {
                 <div className="flex items-center gap-2">
                   <p className="truncate text-[14px] font-medium">{c.subject}</p>
                   <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-[11px] capitalize text-muted">
-                    you: {c.role}
+                    you: {c.viewerRole}
                   </span>
                 </div>
                 <p className="truncate text-[13px] text-muted">
-                  {c.counterpart?.name}: {c.messages.at(-1)?.body ?? "—"}
+                  {c.counterpart?.name}: {c.lastMessage ?? "—"}
                 </p>
               </div>
               <div className="shrink-0 text-right">

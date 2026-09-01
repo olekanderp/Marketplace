@@ -4,7 +4,6 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     const { DataTypes } = Sequelize;
-    // gen_random_uuid() is built in on PG13+, but keep the extension as a backstop.
     await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
     const now = { allowNull: false, type: DataTypes.DATE };
     const uuidPk = {
@@ -171,14 +170,13 @@ module.exports = {
     await queryInterface.addIndex("messages", ["conversation_id", "created_at"]);
   },
 
-  async down(queryInterface, Sequelize) {
+  async down(queryInterface) {
     await queryInterface.dropTable("messages");
     await queryInterface.dropTable("conversations");
     await queryInterface.dropTable("assets");
     await queryInterface.dropTable("seller_profiles");
     await queryInterface.dropTable("buyer_profiles");
     await queryInterface.dropTable("users");
-    // Drop the enum types Sequelize created for the ENUM columns.
     for (const t of [
       "enum_users_role",
       "enum_users_status",
