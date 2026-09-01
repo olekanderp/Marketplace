@@ -44,14 +44,14 @@ export class BuyerProfile extends Model<
 > {
   declare id: CreationOptional<string>;
   declare userId: string;
-  declare headline: string;
-  declare bio: string;
-  declare mandate: string;
+  declare headline: CreationOptional<string>;
+  declare bio: CreationOptional<string>;
+  declare mandate: CreationOptional<string>;
   declare targetSectors: CreationOptional<Sector[]>;
   declare targetJurisdictions: CreationOptional<string[]>;
-  declare ticketMin: number | null;
-  declare ticketMax: number | null;
-  declare currency: Currency;
+  declare ticketMin: CreationOptional<number | null>;
+  declare ticketMax: CreationOptional<number | null>;
+  declare currency: CreationOptional<Currency>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 
@@ -66,8 +66,8 @@ export class SellerProfile extends Model<
 > {
   declare id: CreationOptional<string>;
   declare userId: string;
-  declare companyName: string;
-  declare about: string;
+  declare companyName: CreationOptional<string>;
+  declare about: CreationOptional<string>;
   declare website: CreationOptional<string | null>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
@@ -85,14 +85,14 @@ export class Asset extends Model<
   declare sellerId: string;
   declare title: string;
   declare slug: string;
-  declare description: string;
+  declare description: CreationOptional<string>;
   declare sector: Sector;
-  declare licenseType: string;
+  declare licenseType: CreationOptional<string>;
   declare country: string;
-  declare businessStatus: BusinessStatus;
-  declare askingPrice: number | null;
-  declare currency: Currency;
-  declare yearIssued: number | null;
+  declare businessStatus: CreationOptional<BusinessStatus>;
+  declare askingPrice: CreationOptional<number | null>;
+  declare currency: CreationOptional<Currency>;
+  declare yearIssued: CreationOptional<number | null>;
   declare employees: CreationOptional<string | null>;
   declare regulator: CreationOptional<string | null>;
   declare highlights: CreationOptional<string[]>;
@@ -111,10 +111,10 @@ export class Conversation extends Model<
   InferCreationAttributes<Conversation>
 > {
   declare id: CreationOptional<string>;
-  declare assetId: string | null;
+  declare assetId: CreationOptional<string | null>;
   declare buyerId: string;
   declare sellerId: string;
-  declare subject: string;
+  declare subject: CreationOptional<string>;
   declare createdAt: CreationOptional<Date>;
   declare updatedAt: CreationOptional<Date>;
 
