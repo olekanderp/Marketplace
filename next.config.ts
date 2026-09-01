@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Sequelize + pg load native/dynamic code and must not be bundled by Turbopack.
+  // Sequelize resolves its SQL dialect (and `pg`) through dynamic requires that
+  // a bundler can't follow — keep them as real node_modules at runtime.
   serverExternalPackages: ["sequelize", "pg", "pg-hstore"],
-  output: "standalone",
-  outputFileTracingRoot: __dirname,
 };
 
 export default nextConfig;

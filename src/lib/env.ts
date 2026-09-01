@@ -44,7 +44,11 @@ export function env(): Env {
     DATABASE_URL: required("DATABASE_URL"),
     JWT_SECRET: secret,
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN ?? "7d",
-    COOKIE_SECURE: process.env.COOKIE_SECURE === "true" || nodeEnv === "production",
+    // Explicit COOKIE_SECURE wins; otherwise default to secure only in production.
+    COOKIE_SECURE:
+      process.env.COOKIE_SECURE !== undefined
+        ? process.env.COOKIE_SECURE === "true"
+        : nodeEnv === "production",
     NODE_ENV: nodeEnv,
   };
   return cached;
