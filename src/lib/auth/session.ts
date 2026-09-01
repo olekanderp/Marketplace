@@ -6,9 +6,10 @@ import { env } from "@/lib/env";
 import type { Role } from "@/lib/domain";
 import { forbidden, unauthorized } from "@/lib/http";
 import { signAccessToken, verifyAccessToken, type AccessClaims } from "./jwt";
+import { SESSION_MAX_AGE, TOKEN_COOKIE } from "./constants";
 
-export const TOKEN_COOKIE = "n5deal_token";
-const MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches default JWT lifetime
+export { TOKEN_COOKIE };
+const MAX_AGE = SESSION_MAX_AGE;
 
 /**
  * Resolve the request's user from the JWT cookie.
